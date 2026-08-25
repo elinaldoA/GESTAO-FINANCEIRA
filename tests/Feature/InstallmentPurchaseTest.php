@@ -95,6 +95,6 @@ class InstallmentPurchaseTest extends TestCase
 
         Volt::test('transactions.index')->call('deleteSeries', $parent);
 
-        $this->assertDatabaseCount('transactions', 0);
+        $this->assertEquals(0, \App\Models\Transaction::count());
     }
 }

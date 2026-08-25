@@ -1,0 +1,64 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\User;
+use Illuminate\Support\Carbon;
+
+class FinancialAlerts
+{
+    public static function forUser(User $user): array
+    {
+        $alerts = [];
+        $today = Carbon::today();
+
+        foreach ($user->creditCards()->where('is_active', true)->get() as $card) {
+            $due = $card->invoiceDueDate((int) now()->year, (int) now()->month);
+            $openAmount = (float) $card->invoiceTransactionsQuery((int) now()->year, (int) now()->month)
+                ->where('invoice_paid', false)->sum('amount');
+
+            if ($openAmount <= 0) {
+                continue;
+            }
+
+            $daysToDue = (int) $today->diffInDays($due, false);
+
+            if ($daysToDue <= 5) {
+                $alerts[] = [
+                    'severity' => $daysToDue < 0 ? 'error' : 'warning',
+                    'message' => $daysToDue < 0
+                        ? "Fatura do cartão \"{$card->name}\" venceu em {$due->format('d/m/Y')} e está em aberto (R$ ".number_format($openAmount, 2, ',', '.').').'
+                        : "Fatura do cartão \"{$card->name}\" vence em {$due->format('d/m/Y')} (R$ ".number_format($openAmount, 2, ',', '.').').',
+                    'url' => route('credit-cards.invoice', $card),
+                ];
+            }
+        }
+
+        $overdueCount = $user->transactions()->where('is_paid', false)->where('date', '<', $today)->count();
+        if ($overdueCount > 0) {
+            $alerts[] = [
+                'severity' => 'error',
+                'message' => "Você tem {$overdueCount} ".($overdueCount === 1 ? 'transação pendente vencida' : 'transações pendentes vencidas').'.',
+                'url' => route('transactions.index'),
+            ];
+        }
+
+        foreach ($user->goals()->where('is_active', true)->whereNotNull('target_date')->get() as $goal) {
+            if ($goal->is_achieved) {
+                continue;
+            }
+
+            $daysLeft = (int) $today->diffInDays($goal->target_date, false);
+
+            if ($daysLeft >= 0 && $daysLeft <= 30) {
+                $alerts[] = [
+                    'severity' => 'warning',
+                    'message' => "Meta \"{$goal->name}\" tem prazo em {$daysLeft} dias e ainda falta R$ ".number_format($goal->remaining_amount, 2, ',', '.').'.',
+                    'url' => route('goals.index'),
+                ];
+            }
+        }
+
+        return $alerts;
+    }
+}

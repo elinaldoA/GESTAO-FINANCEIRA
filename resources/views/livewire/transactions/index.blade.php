@@ -55,10 +55,83 @@ new #[Layout('layouts.app')] class extends Component
     #[Url(as: 'busca', except: '')]
     public string $filterSearch = '';
 
+    // bulk actions
+    public array $selected = [];
+    public bool $selectAllPage = false;
+    public string $bulkCategoryId = '';
+
     public function mount(): void
     {
         $this->date = now()->format('Y-m-d');
         $this->filterMonth = now()->format('Y-m');
+    }
+
+    public function updated($property): void
+    {
+        if (str_starts_with($property, 'filter')) {
+            $this->selected = [];
+            $this->selectAllPage = false;
+        }
+    }
+
+    public function updatedSelectAllPage(bool $value): void
+    {
+        $pageIds = $this->filteredQuery()->orderByDesc('date')->orderByDesc('id')
+            ->forPage($this->getPage(), 15)->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        $this->selected = $value
+            ? array_values(array_unique(array_merge($this->selected, $pageIds)))
+            : array_values(array_diff($this->selected, $pageIds));
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+        $this->selectAllPage = false;
+    }
+
+    private function selectedTransactions()
+    {
+        return auth()->user()->transactions()->whereIn('id', $this->selected)->get();
+    }
+
+    public function bulkMarkPaid(): void
+    {
+        auth()->user()->transactions()->whereIn('id', $this->selected)->update(['is_paid' => true]);
+        $this->dispatch('notify', type: 'success', message: 'Transações marcadas como pagas.');
+        $this->clearSelection();
+    }
+
+    public function bulkMarkUnpaid(): void
+    {
+        auth()->user()->transactions()->whereIn('id', $this->selected)->update(['is_paid' => false]);
+        $this->dispatch('notify', type: 'success', message: 'Transações marcadas como pendentes.');
+        $this->clearSelection();
+    }
+
+    public function bulkAssignCategory(): void
+    {
+        if ($this->bulkCategoryId === '') {
+            return;
+        }
+
+        auth()->user()->transactions()->whereIn('id', $this->selected)->update(['category_id' => $this->bulkCategoryId]);
+        $this->dispatch('notify', type: 'success', message: 'Categoria aplicada às transações selecionadas.');
+        $this->bulkCategoryId = '';
+        $this->clearSelection();
+    }
+
+    public function bulkDelete(): void
+    {
+        foreach ($this->selectedTransactions() as $transaction) {
+            if ($transaction->attachment_path) {
+                Storage::disk('public')->delete($transaction->attachment_path);
+            }
+            $transaction->delete();
+        }
+
+        $this->dispatch('notify', type: 'success', message: 'Transações selecionadas excluídas com sucesso.');
+        $this->clearSelection();
     }
 
     public function updatedType(): void
@@ -656,10 +729,34 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
+            @if (count($selected))
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex flex-wrap items-center gap-3">
+                    <span class="text-sm font-medium text-indigo-800">{{ count($selected) }} selecionada(s)</span>
+                    <button type="button" wire:click="bulkMarkPaid" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Marcar como paga</button>
+                    <button type="button" wire:click="bulkMarkUnpaid" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Marcar como pendente</button>
+                    <div class="flex items-center gap-1">
+                        <select wire:model="bulkCategoryId" class="text-sm rounded-md border-gray-300 shadow-sm">
+                            <option value="">Categoria...</option>
+                            @foreach ($allCategories as $category)
+                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" wire:click="bulkAssignCategory" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Aplicar</button>
+                    </div>
+                    <button
+                        type="button"
+                        x-on:click="Swal.fire({icon:'warning',title:'Excluir {{ count($selected) }} transação(ões)?',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.bulkDelete())"
+                        class="text-sm px-3 py-1.5 rounded-md bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                    >Excluir selecionadas</button>
+                    <button type="button" wire:click="clearSelection" class="text-sm text-gray-500 hover:underline ms-auto">Limpar seleção</button>
+                </div>
+            @endif
+
             <div class="bg-white shadow-sm rounded-lg overflow-hidden">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
+                            <th class="px-4 py-3 w-8"><input type="checkbox" wire:model.live="selectAllPage" class="rounded border-gray-300"></th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria / Conta</th>
@@ -671,6 +768,7 @@ new #[Layout('layouts.app')] class extends Component
                     <tbody class="bg-white divide-y divide-gray-200">
                         @forelse ($transactions as $t)
                             <tr>
+                                <td class="px-4 py-4"><input type="checkbox" wire:model.live="selected" value="{{ $t->id }}" class="rounded border-gray-300"></td>
                                 <td class="px-6 py-4 text-sm text-gray-800">
                                     {{ $t->description }}
                                     @if($t->is_recurring)
@@ -722,7 +820,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="px-6 py-6 text-center text-sm text-gray-500">Nenhuma transação encontrada.</td></tr>
+                            <tr><td colspan="7" class="px-6 py-6 text-center text-sm text-gray-500">Nenhuma transação encontrada.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

@@ -61,7 +61,7 @@ class TransactionAdvancedFeaturesTest extends TestCase
 
         Volt::test('transactions.index')->call('deleteSeries', $parent);
 
-        $this->assertDatabaseCount('transactions', 0);
+        $this->assertEquals(0, \App\Models\Transaction::count());
     }
 
     public function test_transaction_can_have_attachment_uploaded_and_removed(): void

@@ -10,6 +10,7 @@ Interface 100% em português (pt-BR), responsiva (sidebar recolhível em telas p
 - Cards de resumo: saldo total, receitas e despesas do mês, patrimônio investido.
 - Gráficos (Chart.js): receitas x despesas dos últimos 6 meses e despesas por categoria.
 - **Central de alertas**: avisa sobre faturas de cartão vencendo ou vencidas, transações pendentes atrasadas e metas com prazo próximo.
+- **Resumo por e-mail**: os mesmos alertas são enviados diariamente por e-mail (job agendado `finance:send-alerts`) para quem tiver pendências em aberto.
 - Lista das últimas transações, contas, cartões e investimentos ativos.
 
 ### Contas
@@ -32,6 +33,7 @@ Interface 100% em português (pt-BR), responsiva (sidebar recolhível em telas p
 - **Busca global** (na barra superior e na própria listagem), filtros por mês, tipo, categoria e forma de pagamento.
 - **Importação de extrato em CSV**: mapeamento de colunas, detecção automática de formato, pré-visualização e conversão automática de valores negativos/positivos em despesa/receita.
 - **Exportação em CSV** respeitando os filtros aplicados.
+- **Ações em massa**: selecione várias transações para marcar como pagas/pendentes, aplicar uma categoria ou excluir de uma vez.
 - Exclusão de uma ocorrência única ou de toda a série (recorrência/parcelamento).
 
 ### Categorias
@@ -58,6 +60,10 @@ Interface 100% em português (pt-BR), responsiva (sidebar recolhível em telas p
 - Despesas por categoria (gráfico + detalhamento) e evolução de receitas x despesas.
 - Filtro por mês/ano ou por **período personalizado** (data inicial e final).
 - Exportação em CSV do período selecionado.
+
+### Lixeira
+- Contas, cartões, transações, categorias, orçamentos, investimentos e metas excluídos vão para uma lixeira (soft delete) em vez de serem apagados na hora.
+- Restauração com um clique ou exclusão definitiva quando desejado.
 
 ### Conta e perfil
 - Cadastro, login, verificação de e-mail, redefinição de senha e confirmação de senha.
@@ -113,6 +119,10 @@ php artisan serve   # servidor local
 npm run dev          # build de assets com hot reload
 ```
 
+### Alertas por e-mail
+
+O resumo diário de alertas financeiros é enviado pelo comando `php artisan finance:send-alerts`, agendado para rodar todo dia às 08h (ver `routes/console.php`). Para o agendamento funcionar em produção, configure o cron do servidor para chamar `php artisan schedule:run` a cada minuto. Em desenvolvimento, rode o comando manualmente ou use `php artisan schedule:work`. O canal de envio (`MAIL_MAILER`) é configurado no `.env`.
+
 ## Testes
 
 O projeto conta com uma suíte de testes automatizados cobrindo autenticação, CRUD de todos os módulos, parcelamento, recorrência, anexos, importação/exportação, regras de categorização, alertas e fatura de cartão.
@@ -136,6 +146,7 @@ php artisan test
 | `/investimentos` | Carteira de investimentos |
 | `/metas` | Metas financeiras |
 | `/relatorios` | Relatórios e exportação |
+| `/lixeira` | Itens excluídos (restaurar ou remover definitivamente) |
 
 ## Licença
 

@@ -72,6 +72,6 @@ class GoalTest extends TestCase
 
         Volt::test('goals.index')->call('delete', $goal);
 
-        $this->assertDatabaseMissing('goals', ['id' => $goal->id]);
+        $this->assertSoftDeleted('goals', ['id' => $goal->id]);
     }
 }

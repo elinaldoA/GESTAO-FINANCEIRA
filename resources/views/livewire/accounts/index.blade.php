@@ -160,7 +160,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                                 <td class="px-6 py-4 text-sm text-right space-x-2">
                                     <button wire:click="edit({{ $account->id }})" class="text-indigo-600 hover:underline">Editar</button>
-                                    <button type="button" x-on:click="Swal.fire({icon:'warning',title:'Excluir conta?',text:'Esta conta e todas as suas transações serão excluídas permanentemente.',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.delete({{ $account->id }}))" class="text-red-600 hover:underline">Excluir</button>
+                                    <button type="button" x-on:click="Swal.fire({icon:'warning',title:'Excluir conta?',text:'A conta será movida para a lixeira e poderá ser restaurada depois.',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.delete({{ $account->id }}))" class="text-red-600 hover:underline">Excluir</button>
                                 </td>
                             </tr>
                         @empty

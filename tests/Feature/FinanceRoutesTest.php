@@ -16,7 +16,7 @@ class FinanceRoutesTest extends TestCase
 
         $this->actingAs($user);
 
-        foreach (['dashboard', 'contas', 'categorias', 'cartoes', 'transacoes', 'orcamentos', 'investimentos', 'metas', 'relatorios'] as $path) {
+        foreach (['dashboard', 'contas', 'categorias', 'cartoes', 'transacoes', 'orcamentos', 'investimentos', 'metas', 'relatorios', 'lixeira'] as $path) {
             $response = $this->get('/'.$path);
             $response->assertOk();
         }

@@ -18,6 +18,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('investimentos', 'investments.index')->name('investments.index');
     Volt::route('metas', 'goals.index')->name('goals.index');
     Volt::route('relatorios', 'reports.index')->name('reports.index');
+    Volt::route('lixeira', 'trash.index')->name('trash.index');
 });
 
 Route::view('profile', 'profile')

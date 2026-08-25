@@ -50,7 +50,7 @@ class InvestmentCrudTest extends TestCase
         $this->assertTrue($investment->gain < 0);
 
         Volt::test('investments.index')->call('delete', $investment);
-        $this->assertDatabaseMissing('investments', ['id' => $investment->id]);
+        $this->assertSoftDeleted('investments', ['id' => $investment->id]);
     }
 
     public function test_user_can_create_a_custom_investment_type(): void
