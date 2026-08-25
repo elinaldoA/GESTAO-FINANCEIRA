@@ -1,0 +1,131 @@
+<?php
+
+use App\Livewire\Actions\Logout;
+use Livewire\Volt\Component;
+
+new class extends Component
+{
+    /**
+     * Log the current user out of the application.
+     */
+    public function logout(Logout $logout): void
+    {
+        $logout();
+
+        $this->redirect('/', navigate: true);
+    }
+}; ?>
+
+<div x-data="{ open: false }">
+    <!-- Top bar -->
+    <div class="lg:pl-64">
+        <div class="sticky top-0 z-30 flex items-center justify-between h-16 bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8">
+            <!-- Mobile logo + hamburger -->
+            <div class="flex items-center gap-2 lg:hidden">
+                <button @click="open = true" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                    <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2">
+                    <x-application-logo class="block h-7 w-auto fill-current text-gray-800" />
+                </a>
+            </div>
+
+            <form action="{{ route('transactions.index') }}" method="GET" class="hidden lg:flex flex-1 max-w-md mx-6">
+                <div class="relative w-full">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        name="busca"
+                        placeholder="Buscar transações..."
+                        class="w-full pl-9 pr-3 py-1.5 text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                </div>
+            </form>
+
+            <!-- User dropdown -->
+            <x-dropdown align="right" width="56">
+                <x-slot name="trigger">
+                    <button class="flex items-center gap-3 px-2 py-1.5 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition duration-150 ease-in-out">
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                            {{ Str::of(auth()->user()->name)->substr(0, 1)->upper() }}
+                        </span>
+                        <span class="hidden sm:flex flex-col items-start leading-tight">
+                            <span class="font-medium text-gray-800" x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" x-on:profile-updated.window="name = $event.detail.name"></span>
+                            <span class="text-xs text-gray-500">{{ auth()->user()->email }}</span>
+                        </span>
+                        <svg class="h-4 w-4 shrink-0 fill-current text-gray-400" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </x-slot>
+
+                <x-slot name="content">
+                    <x-dropdown-link :href="route('profile')" wire:navigate>
+                        {{ __('Profile') }}
+                    </x-dropdown-link>
+
+                    <button wire:click="logout" class="w-full text-start">
+                        <x-dropdown-link>
+                            {{ __('Log Out') }}
+                        </x-dropdown-link>
+                    </button>
+                </x-slot>
+            </x-dropdown>
+        </div>
+    </div>
+
+    <!-- Mobile overlay -->
+    <div x-show="open" x-cloak @click="open = false" class="fixed inset-0 bg-black/50 z-40 lg:hidden" x-transition.opacity></div>
+
+    @php
+        $links = [
+            ['route' => 'dashboard', 'label' => __('Dashboard'), 'icon' => 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z'],
+            ['route' => 'transactions.index', 'label' => __('Transações'), 'icon' => 'M12 8c-3.5 0-6 1.5-6 3s2.5 3 6 3 6 1.5 6 3-2.5 3-6 3m0-12c2.5 0 4.5.8 5.5 2M12 8V6m0 12v2'],
+            ['route' => 'accounts.index', 'label' => __('Contas'), 'icon' => 'M3 7h18M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l2-4h14l2 4'],
+            ['route' => 'credit-cards.index', 'label' => __('Cartões'), 'icon' => 'M2 8h20M2 8v9a2 2 0 002 2h16a2 2 0 002-2V8M2 8V6a2 2 0 012-2h16a2 2 0 012 2v2M6 15h4'],
+            ['route' => 'categories.index', 'label' => __('Categorias'), 'icon' => 'M4 6h16M4 12h10M4 18h6'],
+            ['route' => 'budgets.index', 'label' => __('Orçamentos'), 'icon' => 'M12 3v18M3 12h18'],
+            ['route' => 'investments.index', 'label' => __('Investimentos'), 'icon' => 'M3 17l6-6 4 4 8-8M21 7v6M21 7h-6'],
+            ['route' => 'goals.index', 'label' => __('Metas'), 'icon' => 'M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4Zm0-5v3m0 13v3m9-9h-3M6 12H3'],
+            ['route' => 'reports.index', 'label' => __('Relatórios'), 'icon' => 'M4 20V10m6 10V4m6 16v-7'],
+        ];
+    @endphp
+
+    <!-- Sidebar -->
+    <aside
+        :class="open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+        class="fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0"
+    >
+        <div class="h-16 flex items-center justify-between px-5 border-b border-gray-800">
+            <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2">
+                <x-application-logo class="block h-8 w-auto fill-current text-white" />
+                <span class="text-white font-semibold truncate">{{ config('app.name') }}</span>
+            </a>
+            <button @click="open = false" class="text-gray-400 hover:text-white lg:hidden">
+                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+            @foreach ($links as $link)
+                <a
+                    href="{{ route($link['route']) }}"
+                    wire:navigate
+                    @click="open = false"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out {{ request()->routeIs($link['route']) ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}"
+                >
+                    <svg class="h-5 w-5 shrink-0" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $link['icon'] }}" />
+                    </svg>
+                    {{ $link['label'] }}
+                </a>
+            @endforeach
+        </nav>
+    </aside>
+</div>

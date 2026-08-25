@@ -1,0 +1,27 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Livewire\Volt\Volt;
+
+Route::view('/', 'welcome');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Volt::route('dashboard', 'dashboard')->name('dashboard');
+
+    Volt::route('contas', 'accounts.index')->name('accounts.index');
+    Volt::route('categorias', 'categories.index')->name('categories.index');
+    Volt::route('cartoes', 'credit-cards.index')->name('credit-cards.index');
+    Volt::route('cartoes/{creditCard}/fatura', 'credit-cards.invoice')->name('credit-cards.invoice');
+    Volt::route('transacoes', 'transactions.index')->name('transactions.index');
+    Volt::route('transacoes/importar', 'transactions.import')->name('transactions.import');
+    Volt::route('orcamentos', 'budgets.index')->name('budgets.index');
+    Volt::route('investimentos', 'investments.index')->name('investments.index');
+    Volt::route('metas', 'goals.index')->name('goals.index');
+    Volt::route('relatorios', 'reports.index')->name('reports.index');
+});
+
+Route::view('profile', 'profile')
+    ->middleware(['auth'])
+    ->name('profile');
+
+require __DIR__.'/auth.php';

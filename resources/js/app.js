@@ -1,0 +1,94 @@
+import './bootstrap';
+import { Chart, registerables } from 'chart.js';
+import Swal from 'sweetalert2';
+
+Chart.register(...registerables);
+window.Chart = Chart;
+window.Swal = Swal;
+
+const toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    didOpen: (el) => {
+        el.addEventListener('mouseenter', Swal.stopTimer);
+        el.addEventListener('mouseleave', Swal.resumeTimer);
+    },
+});
+window.toast = toast;
+
+document.addEventListener('livewire:init', () => {
+    Livewire.on('notify', ({ type = 'success', message }) => {
+        toast.fire({ icon: type, title: message, timer: type === 'success' ? 3000 : 6000 });
+    });
+
+    Livewire.hook('request', ({ fail }) => {
+        fail(({ status, preventDefault }) => {
+            if (status === 419) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Sessão expirada',
+                    text: 'Sua sessão expirou. A página será recarregada.',
+                    confirmButtonText: 'Recarregar',
+                    confirmButtonColor: '#4f46e5',
+                }).then(() => window.location.reload());
+                preventDefault();
+
+                return;
+            }
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Ops, algo deu errado',
+                text: 'Não foi possível concluir a ação. Tente novamente.',
+                confirmButtonColor: '#4f46e5',
+            });
+            preventDefault();
+        });
+    });
+});
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('trendChart', (data) => ({
+        chart: null,
+        init(canvas) {
+            this.chart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'Receitas', data: data.income, backgroundColor: '#22c55e' },
+                        { label: 'Despesas', data: data.expense, backgroundColor: '#ef4444' },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                },
+            });
+        },
+    }));
+
+    Alpine.data('categoryChart', (data) => ({
+        chart: null,
+        init(canvas) {
+            this.chart = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { data: data.totals, backgroundColor: data.colors },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                },
+            });
+        },
+    }));
+});
