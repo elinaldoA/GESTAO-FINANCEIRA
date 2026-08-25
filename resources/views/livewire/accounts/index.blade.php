@@ -24,6 +24,40 @@ new #[Layout('layouts.app')] class extends Component
 
     public ?int $editingId = null;
 
+    public array $selected = [];
+    public bool $selectAll = false;
+
+    public function updatedSelectAll(bool $value): void
+    {
+        $this->selected = $value
+            ? auth()->user()->accounts()->pluck('id')->map(fn ($id) => (string) $id)->all()
+            : [];
+    }
+
+    public function bulkActivate(): void
+    {
+        auth()->user()->accounts()->whereIn('id', $this->selected)->update(['is_active' => true]);
+        $this->dispatch('notify', type: 'success', message: 'Contas ativadas.');
+        $this->selected = [];
+        $this->selectAll = false;
+    }
+
+    public function bulkDeactivate(): void
+    {
+        auth()->user()->accounts()->whereIn('id', $this->selected)->update(['is_active' => false]);
+        $this->dispatch('notify', type: 'success', message: 'Contas inativadas.');
+        $this->selected = [];
+        $this->selectAll = false;
+    }
+
+    public function bulkDelete(): void
+    {
+        auth()->user()->accounts()->whereIn('id', $this->selected)->get()->each->delete();
+        $this->dispatch('notify', type: 'success', message: 'Contas selecionadas excluídas com sucesso.');
+        $this->selected = [];
+        $this->selectAll = false;
+    }
+
     public function save(): void
     {
         $this->validate();
@@ -131,10 +165,25 @@ new #[Layout('layouts.app')] class extends Component
                 </form>
             </div>
 
+            @if (count($selected))
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex flex-wrap items-center gap-3">
+                    <span class="text-sm font-medium text-indigo-800">{{ count($selected) }} selecionada(s)</span>
+                    <button type="button" wire:click="bulkActivate" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Ativar</button>
+                    <button type="button" wire:click="bulkDeactivate" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Inativar</button>
+                    <button
+                        type="button"
+                        x-on:click="Swal.fire({icon:'warning',title:'Excluir {{ count($selected) }} conta(s)?',text:'As contas serão movidas para a lixeira e poderão ser restauradas depois.',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.bulkDelete())"
+                        class="text-sm px-3 py-1.5 rounded-md bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                    >Excluir selecionadas</button>
+                    <button type="button" x-on:click="$wire.selected = []; $wire.selectAll = false" class="text-sm text-gray-500 hover:underline ms-auto">Limpar seleção</button>
+                </div>
+            @endif
+
             <div class="bg-white shadow-sm rounded-lg overflow-hidden">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
+                            <th class="px-4 py-3 w-8"><input type="checkbox" wire:model.live="selectAll" class="rounded border-gray-300"></th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo atual</th>
@@ -145,6 +194,7 @@ new #[Layout('layouts.app')] class extends Component
                     <tbody class="bg-white divide-y divide-gray-200">
                         @forelse ($accounts as $account)
                             <tr>
+                                <td class="px-4 py-4"><input type="checkbox" wire:model.live="selected" value="{{ $account->id }}" class="rounded border-gray-300"></td>
                                 <td class="px-6 py-4 text-sm text-gray-800 flex items-center gap-2">
                                     <span class="w-2.5 h-2.5 rounded-full" style="background-color: {{ $account->color }}"></span>
                                     {{ $account->name }}
@@ -164,7 +214,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="5" class="px-6 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada.</td></tr>
+                            <tr><td colspan="6" class="px-6 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

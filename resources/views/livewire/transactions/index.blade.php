@@ -51,6 +51,7 @@ new #[Layout('layouts.app')] class extends Component
     public string $filterMonth = '';
     public ?int $filterCategoryId = null;
     public string $filterPaymentMethod = '';
+    public string $filterReconciled = '';
 
     #[Url(as: 'busca', except: '')]
     public string $filterSearch = '';
@@ -107,6 +108,19 @@ new #[Layout('layouts.app')] class extends Component
         auth()->user()->transactions()->whereIn('id', $this->selected)->update(['is_paid' => false]);
         $this->dispatch('notify', type: 'success', message: 'Transações marcadas como pendentes.');
         $this->clearSelection();
+    }
+
+    public function bulkReconcile(): void
+    {
+        auth()->user()->transactions()->whereIn('id', $this->selected)->whereNull('reconciled_at')->update(['reconciled_at' => now()]);
+        $this->dispatch('notify', type: 'success', message: 'Transações marcadas como conciliadas.');
+        $this->clearSelection();
+    }
+
+    public function toggleReconciled(Transaction $transaction): void
+    {
+        $this->authorize('update', $transaction);
+        $transaction->update(['reconciled_at' => $transaction->reconciled_at ? null : now()]);
     }
 
     public function bulkAssignCategory(): void
@@ -441,6 +455,12 @@ new #[Layout('layouts.app')] class extends Component
             $query->where('payment_method', $this->filterPaymentMethod);
         }
 
+        if ($this->filterReconciled === 'sim') {
+            $query->whereNotNull('reconciled_at');
+        } elseif ($this->filterReconciled === 'nao') {
+            $query->whereNull('reconciled_at');
+        }
+
         if ($this->filterSearch) {
             $query->where(function ($q) {
                 $q->where('description', 'like', '%'.$this->filterSearch.'%')
@@ -721,6 +741,14 @@ new #[Layout('layouts.app')] class extends Component
                         @endforeach
                     </select>
                 </div>
+                <div>
+                    <x-input-label value="Conciliação" />
+                    <select wire:model.live="filterReconciled" class="mt-1 rounded-md border-gray-300 shadow-sm">
+                        <option value="">Todas</option>
+                        <option value="sim">Conciliadas</option>
+                        <option value="nao">Não conciliadas</option>
+                    </select>
+                </div>
                 <div class="ms-auto flex gap-2">
                     <a href="{{ route('transactions.import') }}" wire:navigate>
                         <x-secondary-button type="button">⬆ Importar CSV</x-secondary-button>
@@ -734,6 +762,7 @@ new #[Layout('layouts.app')] class extends Component
                     <span class="text-sm font-medium text-indigo-800">{{ count($selected) }} selecionada(s)</span>
                     <button type="button" wire:click="bulkMarkPaid" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Marcar como paga</button>
                     <button type="button" wire:click="bulkMarkUnpaid" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Marcar como pendente</button>
+                    <button type="button" wire:click="bulkReconcile" class="text-sm px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-50">Marcar como conciliada</button>
                     <div class="flex items-center gap-1">
                         <select wire:model="bulkCategoryId" class="text-sm rounded-md border-gray-300 shadow-sm">
                             <option value="">Categoria...</option>
@@ -783,6 +812,12 @@ new #[Layout('layouts.app')] class extends Component
                                     @unless($t->is_paid)
                                         <span class="ml-1 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">pendente</span>
                                     @endunless
+                                    <button
+                                        type="button"
+                                        wire:click="toggleReconciled({{ $t->id }})"
+                                        title="{{ $t->is_reconciled ? 'Conciliada — clique para desfazer' : 'Não conciliada — clique para marcar' }}"
+                                        class="ml-1 text-xs px-1.5 py-0.5 rounded {{ $t->is_reconciled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400' }}"
+                                    >{{ $t->is_reconciled ? '✓ conciliada' : 'não conciliada' }}</button>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">{{ $t->date->format('d/m/Y') }}</td>
                                 <td class="px-6 py-4 text-sm text-gray-500">

@@ -93,6 +93,7 @@ new #[Layout('layouts.app')] class extends Component
         fgetcsv($handle, 0, $delimiter);
 
         $imported = 0;
+        $reconciled = 0;
         $failed = 0;
 
         while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
@@ -116,17 +117,37 @@ new #[Layout('layouts.app')] class extends Component
                     continue;
                 }
 
+                $type = $amount < 0 ? 'despesa' : 'receita';
+
+                $match = auth()->user()->transactions()
+                    ->where('account_id', $this->account_id)
+                    ->where('type', $type)
+                    ->where('amount', abs($amount))
+                    ->whereNull('reconciled_at')
+                    ->whereBetween('date', [$date->copy()->subDays(3), $date->copy()->addDays(3)])
+                    ->get()
+                    ->sortBy(fn ($t) => abs($t->date->diffInDays($date, false)))
+                    ->first();
+
+                if ($match) {
+                    $match->update(['reconciled_at' => now(), 'is_paid' => true]);
+                    $reconciled++;
+
+                    continue;
+                }
+
                 $matchedCategoryId = CategoryRule::matchCategoryFor(auth()->id(), $description) ?? $this->category_id;
 
                 auth()->user()->transactions()->create([
                     'account_id' => $this->account_id,
                     'category_id' => $matchedCategoryId,
-                    'type' => $amount < 0 ? 'despesa' : 'receita',
+                    'type' => $type,
                     'payment_method' => 'debito',
                     'description' => $description !== '' ? $description : 'Importado do extrato',
                     'amount' => abs($amount),
                     'date' => $date->format('Y-m-d'),
                     'is_paid' => true,
+                    'reconciled_at' => now(),
                 ]);
 
                 $imported++;
@@ -139,12 +160,15 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->reset(['file', 'headers', 'previewRows', 'dateColumn', 'descriptionColumn', 'amountColumn']);
 
-        $message = "{$imported} ".($imported === 1 ? 'transação importada' : 'transações importadas').'.';
+        $message = "{$imported} ".($imported === 1 ? 'transação nova importada' : 'transações novas importadas').'.';
+        if ($reconciled > 0) {
+            $message .= " {$reconciled} já existentes foram conciliadas com o extrato.";
+        }
         if ($failed > 0) {
             $message .= " {$failed} ".($failed === 1 ? 'linha foi ignorada' : 'linhas foram ignoradas').' por erro de formato.';
         }
 
-        $this->dispatch('notify', type: $imported > 0 ? 'success' : 'warning', message: $message);
+        $this->dispatch('notify', type: ($imported > 0 || $reconciled > 0) ? 'success' : 'warning', message: $message);
     }
 
     public function with(): array

@@ -31,7 +31,8 @@ Interface 100% em português (pt-BR), responsiva (sidebar recolhível em telas p
 - **Anexos**: upload de comprovante (PDF ou imagem) por transação.
 - **Regras automáticas de categorização**: categoriza transações automaticamente quando a descrição contém uma palavra-chave cadastrada (ex.: "Uber" → Transporte).
 - **Busca global** (na barra superior e na própria listagem), filtros por mês, tipo, categoria e forma de pagamento.
-- **Importação de extrato em CSV**: mapeamento de colunas, detecção automática de formato, pré-visualização e conversão automática de valores negativos/positivos em despesa/receita.
+- **Importação de extrato em CSV com conciliação bancária**: mapeamento de colunas, detecção automática de formato e pré-visualização. Linhas do extrato que já correspondem a uma transação existente (mesma conta, tipo, valor e data próxima) conciliam essa transação em vez de duplicá-la; as demais são criadas já conciliadas.
+- **Conciliação bancária**: cada transação pode ser marcada manualmente como conciliada ou não, com filtro dedicado e ação em massa para conciliar várias de uma vez.
 - **Exportação em CSV** respeitando os filtros aplicados.
 - **Ações em massa**: selecione várias transações para marcar como pagas/pendentes, aplicar uma categoria ou excluir de uma vez.
 - Exclusão de uma ocorrência única ou de toda a série (recorrência/parcelamento).
@@ -39,6 +40,12 @@ Interface 100% em português (pt-BR), responsiva (sidebar recolhível em telas p
 ### Categorias
 - Categorias de receita e despesa, com cor personalizada.
 - Painel de regras automáticas de categorização (ver acima).
+
+### Ações em massa
+- Contas, cartões de crédito, transações e metas permitem selecionar vários itens de uma vez.
+- Transações: marcar como pagas/pendentes, conciliar, aplicar categoria ou excluir em lote.
+- Contas: ativar, inativar ou excluir em lote.
+- Cartões e metas: excluir em lote.
 
 ### Orçamentos
 - Definição de limite mensal por categoria.

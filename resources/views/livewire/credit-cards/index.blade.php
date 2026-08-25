@@ -24,6 +24,15 @@ new #[Layout('layouts.app')] class extends Component
 
     public ?int $editingId = null;
 
+    public array $selected = [];
+
+    public function bulkDelete(): void
+    {
+        auth()->user()->creditCards()->whereIn('id', $this->selected)->get()->each->delete();
+        $this->dispatch('notify', type: 'success', message: 'Cartões selecionados excluídos com sucesso.');
+        $this->selected = [];
+    }
+
     public function save(): void
     {
         $this->validate();
@@ -122,13 +131,28 @@ new #[Layout('layouts.app')] class extends Component
                 </form>
             </div>
 
+            @if (count($selected))
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 flex flex-wrap items-center gap-3">
+                    <span class="text-sm font-medium text-indigo-800">{{ count($selected) }} selecionado(s)</span>
+                    <button
+                        type="button"
+                        x-on:click="Swal.fire({icon:'warning',title:'Excluir {{ count($selected) }} cartão(ões)?',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.bulkDelete())"
+                        class="text-sm px-3 py-1.5 rounded-md bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                    >Excluir selecionados</button>
+                    <button type="button" wire:click="$set('selected', [])" class="text-sm text-gray-500 hover:underline ms-auto">Limpar seleção</button>
+                </div>
+            @endif
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 @forelse ($creditCards as $card)
                     <div class="bg-white shadow-sm rounded-lg p-6 border-t-4" style="border-color: {{ $card->color }}">
                         <div class="flex justify-between items-start">
-                            <div>
-                                <p class="font-semibold text-gray-800">{{ $card->name }}</p>
-                                <p class="text-xs text-gray-500">Fecha dia {{ $card->closing_day }} · Vence dia {{ $card->due_day }}</p>
+                            <div class="flex items-start gap-2">
+                                <input type="checkbox" wire:model.live="selected" value="{{ $card->id }}" class="mt-1 rounded border-gray-300">
+                                <div>
+                                    <p class="font-semibold text-gray-800">{{ $card->name }}</p>
+                                    <p class="text-xs text-gray-500">Fecha dia {{ $card->closing_day }} · Vence dia {{ $card->due_day }}</p>
+                                </div>
                             </div>
                             <span class="space-x-2 text-sm">
                                 <button wire:click="edit({{ $card->id }})" class="text-indigo-600 hover:underline">Editar</button>
