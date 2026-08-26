@@ -38,5 +38,8 @@ jobs:
       - name: Check code style (Pint)
         run: vendor/bin/pint --test
 
+      - name: Static analysis (Larastan)
+        run: vendor/bin/phpstan analyse --no-progress
+
       - name: Run tests
         run: php artisan test
