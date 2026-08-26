@@ -2,6 +2,7 @@
 
 use App\Models\Investment;
 use App\Models\InvestmentType;
+use App\Services\StockQuoteService;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -12,17 +13,29 @@ new #[Layout('layouts.app')] class extends Component
     use WithPagination;
 
     public string $name = '';
+
     public ?int $investment_type_id = null;
+
     public string $broker = '';
+
+    public string $ticker = '';
+
+    public string $quantity = '';
+
     public string $invested_amount = '0';
+
     public string $current_amount = '0';
+
     public string $color = '#3b82f6';
+
     public ?int $editingId = null;
 
     public string $new_type_name = '';
+
     public string $new_type_color = '#64748b';
 
     public ?int $filterTypeId = null;
+
     public bool $showTypeManager = false;
 
     public function mount(): void
@@ -48,6 +61,8 @@ new #[Layout('layouts.app')] class extends Component
             'name' => 'required|string|max:255',
             'investment_type_id' => ['required', Rule::exists('investment_types', 'id')->where('user_id', auth()->id())],
             'broker' => 'nullable|string|max:255',
+            'ticker' => 'nullable|string|max:20',
+            'quantity' => 'nullable|required_with:ticker|numeric|min:0',
             'invested_amount' => 'required|numeric|min:0',
             'current_amount' => 'required|numeric|min:0',
             'color' => 'required|string',
@@ -61,6 +76,8 @@ new #[Layout('layouts.app')] class extends Component
                 'investment_type_id' => $this->investment_type_id,
                 'name' => $this->name,
                 'broker' => $this->broker !== '' ? $this->broker : null,
+                'ticker' => $this->ticker !== '' ? mb_strtoupper($this->ticker) : null,
+                'quantity' => $this->ticker !== '' ? $this->quantity : null,
                 'invested_amount' => $this->invested_amount,
                 'current_amount' => $this->current_amount,
                 'color' => $this->color,
@@ -80,6 +97,8 @@ new #[Layout('layouts.app')] class extends Component
         $this->name = $investment->name;
         $this->investment_type_id = $investment->investment_type_id;
         $this->broker = (string) $investment->broker;
+        $this->ticker = (string) $investment->ticker;
+        $this->quantity = (string) $investment->quantity;
         $this->invested_amount = (string) $investment->invested_amount;
         $this->current_amount = (string) $investment->current_amount;
         $this->color = $investment->color;
@@ -90,6 +109,30 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetForm();
     }
 
+    public function refreshQuote(Investment $investment, StockQuoteService $quotes): void
+    {
+        $this->authorize('update', $investment);
+
+        if (! $investment->ticker || ! $investment->quantity) {
+            return;
+        }
+
+        $price = $quotes->fetchPrice($investment->ticker);
+
+        if ($price === null) {
+            $this->dispatch('notify', type: 'error', message: "Não foi possível obter a cotação de {$investment->ticker} agora.");
+
+            return;
+        }
+
+        $investment->update([
+            'current_amount' => round($price * (float) $investment->quantity, 2),
+            'quote_updated_at' => now(),
+        ]);
+
+        $this->dispatch('notify', type: 'success', message: "Cotação de {$investment->ticker} atualizada.");
+    }
+
     public function filterByType(?int $typeId): void
     {
         $this->filterTypeId = $typeId;
@@ -98,7 +141,7 @@ new #[Layout('layouts.app')] class extends Component
 
     private function resetForm(): void
     {
-        $this->reset(['name', 'broker', 'editingId', 'investment_type_id']);
+        $this->reset(['name', 'broker', 'ticker', 'quantity', 'editingId', 'investment_type_id']);
         $this->invested_amount = '0';
         $this->current_amount = '0';
         $this->color = '#3b82f6';
@@ -346,6 +389,17 @@ new #[Layout('layouts.app')] class extends Component
                         <x-input-error :messages="$errors->get('broker')" class="mt-1" />
                     </div>
                     <div>
+                        <x-input-label for="ticker" value="Ticker (B3)" />
+                        <x-text-input id="ticker" type="text" class="mt-1 block w-full" wire:model="ticker" placeholder="Ex: ITUB4" />
+                        <x-input-error :messages="$errors->get('ticker')" class="mt-1" />
+                        <p class="text-xs text-gray-400 mt-1">Opcional. Se preenchido, permite atualizar a cotação automaticamente.</p>
+                    </div>
+                    <div>
+                        <x-input-label for="quantity" value="Quantidade" />
+                        <x-text-input id="quantity" type="number" step="0.00000001" class="mt-1 block w-full" wire:model="quantity" placeholder="Nº de cotas/ações" />
+                        <x-input-error :messages="$errors->get('quantity')" class="mt-1" />
+                    </div>
+                    <div>
                         <x-input-label for="invested_amount" value="Valor investido" />
                         <x-text-input id="invested_amount" type="number" step="0.01" class="mt-1 block w-full" wire:model="invested_amount" />
                         <x-input-error :messages="$errors->get('invested_amount')" class="mt-1" />
@@ -393,6 +447,14 @@ new #[Layout('layouts.app')] class extends Component
                                     @if($investment->broker)
                                         <p class="text-xs text-gray-500 mt-0.5">{{ $investment->broker }}</p>
                                     @endif
+                                    @if($investment->ticker)
+                                        <p class="text-xs text-gray-400 mt-0.5">
+                                            {{ $investment->ticker }}
+                                            @if($investment->quote_updated_at)
+                                                &middot; cotação de {{ $investment->quote_updated_at->diffForHumans() }}
+                                            @endif
+                                        </p>
+                                    @endif
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">
                                     @if($investment->investmentType)
@@ -419,6 +481,9 @@ new #[Layout('layouts.app')] class extends Component
                                     </button>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-right space-x-2">
+                                    @if($investment->ticker)
+                                        <button wire:click="refreshQuote({{ $investment->id }})" wire:loading.attr="disabled" wire:target="refreshQuote({{ $investment->id }})" class="text-gray-500 hover:underline disabled:opacity-50">Atualizar cotação</button>
+                                    @endif
                                     <button wire:click="edit({{ $investment->id }})" class="text-indigo-600 hover:underline">Editar</button>
                                     <button type="button" x-on:click="Swal.fire({icon:'warning',title:'Excluir investimento?',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.delete({{ $investment->id }}))" class="text-red-600 hover:underline">Excluir</button>
                                 </td>

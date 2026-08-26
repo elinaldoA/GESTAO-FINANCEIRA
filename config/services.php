@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'brapi' => [
+        'token' => env('BRAPI_TOKEN'),
+    ],
+
 ];

@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('finance:send-alerts')->dailyAt('08:00');
+Schedule::command('investments:update-quotes')->hourlyAt(30)->between('10:00', '18:00')->weekdays();
