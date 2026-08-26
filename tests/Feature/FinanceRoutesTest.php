@@ -21,4 +21,15 @@ class FinanceRoutesTest extends TestCase
             $response->assertOk();
         }
     }
+
+    public function test_user_with_unverified_email_is_redirected_away_from_finance_pages(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user);
+
+        $response = $this->get('/dashboard');
+
+        $response->assertRedirect(route('verification.notice'));
+    }
 }

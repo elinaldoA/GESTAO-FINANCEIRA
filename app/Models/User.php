@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -47,46 +48,55 @@ class User extends Authenticatable
         ];
     }
 
+    /** @return HasMany<Account, $this> */
     public function accounts(): HasMany
     {
         return $this->hasMany(Account::class);
     }
 
+    /** @return HasMany<Category, $this> */
     public function categories(): HasMany
     {
         return $this->hasMany(Category::class);
     }
 
+    /** @return HasMany<CreditCard, $this> */
     public function creditCards(): HasMany
     {
         return $this->hasMany(CreditCard::class);
     }
 
+    /** @return HasMany<Transaction, $this> */
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
     }
 
+    /** @return HasMany<Budget, $this> */
     public function budgets(): HasMany
     {
         return $this->hasMany(Budget::class);
     }
 
+    /** @return HasMany<Investment, $this> */
     public function investments(): HasMany
     {
         return $this->hasMany(Investment::class);
     }
 
+    /** @return HasMany<InvestmentType, $this> */
     public function investmentTypes(): HasMany
     {
         return $this->hasMany(InvestmentType::class);
     }
 
+    /** @return HasMany<Goal, $this> */
     public function goals(): HasMany
     {
         return $this->hasMany(Goal::class);
     }
 
+    /** @return HasMany<CategoryRule, $this> */
     public function categoryRules(): HasMany
     {
         return $this->hasMany(CategoryRule::class);
