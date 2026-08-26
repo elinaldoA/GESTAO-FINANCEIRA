@@ -64,7 +64,6 @@ new #[Layout('layouts.app')] class extends Component
     public function mount(): void
     {
         $this->date = now()->format('Y-m-d');
-        $this->filterMonth = now()->format('Y-m');
     }
 
     public function updated($property): void

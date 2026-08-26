@@ -48,4 +48,31 @@ class TransactionSearchTest extends TestCase
 
         $response->assertOk();
     }
+
+    public function test_transactions_from_all_months_are_shown_by_default(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id,
+            'type' => 'despesa',
+            'description' => 'Compra antiga',
+            'amount' => 10,
+            'date' => now()->subMonths(6),
+        ]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id,
+            'type' => 'despesa',
+            'description' => 'Compra deste mês',
+            'amount' => 20,
+            'date' => now(),
+        ]);
+
+        Volt::test('transactions.index')
+            ->assertSee('Compra antiga')
+            ->assertSee('Compra deste mês');
+    }
 }
