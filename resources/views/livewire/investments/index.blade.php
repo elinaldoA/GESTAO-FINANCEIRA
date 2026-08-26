@@ -130,13 +130,7 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        $investment->update([
-            'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
-            'day_change_percent' => $quote['changePercent'],
-            'week52_low' => $quote['week52Low'],
-            'week52_high' => $quote['week52High'],
-            'quote_updated_at' => now(),
-        ]);
+        $investment->applyQuote($quote);
 
         $this->dispatch('notify', type: 'success', message: "Cotação de {$investment->ticker} atualizada.");
     }
@@ -174,13 +168,7 @@ new #[Layout('layouts.app')] class extends Component
                 continue;
             }
 
-            $investment->update([
-                'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
-                'day_change_percent' => $quote['changePercent'],
-                'week52_low' => $quote['week52Low'],
-                'week52_high' => $quote['week52High'],
-                'quote_updated_at' => now(),
-            ]);
+            $investment->applyQuote($quote);
 
             $updated++;
         }
@@ -300,6 +288,7 @@ new #[Layout('layouts.app')] class extends Component
             'totalInvested' => $totalInvested,
             'totalCurrent' => $totalCurrent,
             'totalAssets' => $allInvestments->count(),
+            'totalDividends' => (float) $user->dividends()->sum('amount'),
             'hasTrackedInvestments' => $allInvestments->whereNotNull('ticker')->isNotEmpty(),
             'marketIndices' => $marketIndices,
             'allocationChart' => [
@@ -362,7 +351,7 @@ new #[Layout('layouts.app')] class extends Component
             @endif
 
             @php $totalGain = $totalCurrent - $totalInvested; @endphp
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div class="bg-white shadow-sm rounded-lg p-5">
                     <p class="text-sm text-gray-500">Patrimônio</p>
                     <p class="mt-1 text-2xl font-bold text-gray-900">R$ {{ number_format($totalCurrent, 2, ',', '.') }}</p>
@@ -379,6 +368,10 @@ new #[Layout('layouts.app')] class extends Component
                             ({{ $totalGain >= 0 ? '+' : '' }}{{ $totalInvested > 0 ? number_format(($totalGain / $totalInvested) * 100, 2, ',', '.') : '0,00' }}%)
                         </span>
                     </p>
+                </div>
+                <div class="bg-white shadow-sm rounded-lg p-5">
+                    <p class="text-sm text-gray-500">Proventos recebidos</p>
+                    <p class="mt-1 text-2xl font-bold text-green-600">R$ {{ number_format($totalDividends, 2, ',', '.') }}</p>
                 </div>
                 <div class="bg-white shadow-sm rounded-lg p-5">
                     <p class="text-sm text-gray-500">Ativos</p>
@@ -612,7 +605,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="px-6 py-4 text-sm text-gray-800">
                                     <div class="flex items-center gap-2">
                                         <span class="w-2.5 h-2.5 rounded-full" style="background-color: {{ $investment->color }}"></span>
-                                        {{ $investment->name }}
+                                        <a href="{{ route('investments.show', $investment) }}" wire:navigate class="hover:underline hover:text-indigo-600">{{ $investment->name }}</a>
                                     </div>
                                     @if($investment->broker)
                                         <p class="text-xs text-gray-500 mt-0.5">{{ $investment->broker }}</p>
@@ -638,6 +631,19 @@ new #[Layout('layouts.app')] class extends Component
                                                     <div class="h-1 rounded-full bg-slate-400" style="width: {{ $rangePercent }}%"></div>
                                                 </div>
                                                 <p class="text-[10px] text-gray-400 mt-0.5">52 sem: R$ {{ number_format($investment->week52_low, 2, ',', '.') }} – R$ {{ number_format($investment->week52_high, 2, ',', '.') }}</p>
+                                            </div>
+                                        @endif
+                                        @if($investment->price_earnings !== null || $investment->price_to_book !== null || $investment->dividend_yield !== null)
+                                            <div class="flex flex-wrap gap-1 mt-1.5">
+                                                @if($investment->price_earnings !== null)
+                                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">P/L {{ number_format($investment->price_earnings, 1, ',', '.') }}</span>
+                                                @endif
+                                                @if($investment->price_to_book !== null)
+                                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">P/VP {{ number_format($investment->price_to_book, 1, ',', '.') }}</span>
+                                                @endif
+                                                @if($investment->dividend_yield !== null)
+                                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">DY {{ number_format($investment->dividend_yield, 1, ',', '.') }}%</span>
+                                                @endif
                                             </div>
                                         @endif
                                     @endif
@@ -670,6 +676,7 @@ new #[Layout('layouts.app')] class extends Component
                                     @if($investment->ticker)
                                         <button wire:click="refreshQuote({{ $investment->id }})" wire:loading.attr="disabled" wire:target="refreshQuote({{ $investment->id }})" class="text-gray-500 hover:underline disabled:opacity-50">Atualizar cotação</button>
                                     @endif
+                                    <a href="{{ route('investments.show', $investment) }}" wire:navigate class="text-gray-500 hover:underline">Detalhes</a>
                                     <button wire:click="edit({{ $investment->id }})" class="text-indigo-600 hover:underline">Editar</button>
                                     <button type="button" x-on:click="Swal.fire({icon:'warning',title:'Excluir investimento?',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.delete({{ $investment->id }}))" class="text-red-600 hover:underline">Excluir</button>
                                 </td>

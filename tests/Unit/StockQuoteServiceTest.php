@@ -29,6 +29,55 @@ class StockQuoteServiceTest extends TestCase
         $this->assertSame(50.69, $quote['week52High']);
     }
 
+    public function test_fetch_quote_returns_fundamental_indicators(): void
+    {
+        Http::fake([
+            'brapi.dev/api/quote/PETR4*' => Http::response([
+                'results' => [[
+                    'regularMarketPrice' => 41.35,
+                    'defaultKeyStatistics' => [
+                        'trailingPE' => 4.44,
+                        'priceToBook' => 1.11,
+                        'dividendYield' => 0.09,
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $quote = (new StockQuoteService)->fetchQuote('PETR4');
+
+        $this->assertSame(4.44, $quote['priceEarnings']);
+        $this->assertSame(1.11, $quote['priceToBook']);
+        $this->assertSame(9.0, $quote['dividendYield']);
+    }
+
+    public function test_fetch_history_returns_dated_closing_prices(): void
+    {
+        Http::fake([
+            'brapi.dev/*' => Http::response([
+                'results' => [[
+                    'regularMarketPrice' => 41.0,
+                    'historicalDataPrice' => [
+                        ['date' => 1785121200, 'close' => 39.5],
+                        ['date' => 1785207600, 'close' => 40.2],
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $history = (new StockQuoteService)->fetchHistory('PETR4');
+
+        $this->assertCount(2, $history);
+        $this->assertSame(39.5, $history[0]['close']);
+    }
+
+    public function test_fetch_history_returns_an_empty_array_when_the_api_fails(): void
+    {
+        Http::fake(['brapi.dev/*' => Http::response(['error' => true], 500)]);
+
+        $this->assertSame([], (new StockQuoteService)->fetchHistory('PETR4'));
+    }
+
     public function test_fetch_quote_returns_null_when_ticker_is_unknown(): void
     {
         Http::fake([

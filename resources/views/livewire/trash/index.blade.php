@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Budget;
 use App\Models\Category;
 use App\Models\CreditCard;
+use App\Models\Dividend;
 use App\Models\Goal;
 use App\Models\Investment;
 use App\Models\Transaction;
@@ -20,6 +21,7 @@ new #[Layout('layouts.app')] class extends Component
         'categories' => ['model' => Category::class, 'label' => 'Categorias'],
         'budgets' => ['model' => Budget::class, 'label' => 'Orçamentos'],
         'investments' => ['model' => Investment::class, 'label' => 'Investimentos'],
+        'dividends' => ['model' => Dividend::class, 'label' => 'Proventos'],
         'goals' => ['model' => Goal::class, 'label' => 'Metas'],
     ];
 
@@ -66,6 +68,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         return match ($type) {
             'transactions' => $item->description,
+            'dividends' => 'R$ '.number_format($item->amount, 2, ',', '.').' — '.$item->date->format('d/m/Y'),
             default => $item->name,
         };
     }

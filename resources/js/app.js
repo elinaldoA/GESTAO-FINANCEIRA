@@ -126,4 +126,33 @@ document.addEventListener('alpine:init', () => {
             });
         },
     }));
+
+    Alpine.data('assetHistoryChart', (data) => ({
+        chart: null,
+        init(canvas) {
+            this.chart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Cotação',
+                            data: data.close,
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            tension: 0.2,
+                            fill: true,
+                            pointRadius: 0,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: false } },
+                    plugins: { legend: { display: false } },
+                },
+            });
+        },
+    }));
 });

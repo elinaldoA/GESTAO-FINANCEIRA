@@ -107,4 +107,10 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(PortfolioSnapshot::class);
     }
+
+    /** @return HasMany<Dividend, $this> */
+    public function dividends(): HasMany
+    {
+        return $this->hasMany(Dividend::class);
+    }
 }

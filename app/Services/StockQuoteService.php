@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -28,11 +29,13 @@ class StockQuoteService
     }
 
     /**
-     * Fetch the latest price, day change percent and 52-week range for a ticker.
-     * Results are cached briefly (see CACHE_SECONDS) to protect the upstream API
-     * from being hammered by auto-refresh polling.
+     * Fetch the latest price, day change percent, 52-week range and fundamentalist
+     * indicators (P/L, P/VP, dividend yield — all available on Brapi's free tier via
+     * the defaultKeyStatistics module) for a ticker. Results are cached briefly (see
+     * CACHE_SECONDS) to protect the upstream API from being hammered by auto-refresh
+     * polling.
      *
-     * @return array{price: float, changePercent: ?float, week52Low: ?float, week52High: ?float}|null
+     * @return array{price: float, changePercent: ?float, week52Low: ?float, week52High: ?float, priceEarnings: ?float, priceToBook: ?float, dividendYield: ?float}|null
      */
     public function fetchQuote(string $ticker): ?array
     {
@@ -44,6 +47,7 @@ class StockQuoteService
         try {
             $response = Http::timeout(10)->get("https://brapi.dev/api/quote/{$ticker}", array_filter([
                 'token' => config('services.brapi.token'),
+                'modules' => 'defaultKeyStatistics',
             ]));
 
             if (! $response->successful()) {
@@ -63,18 +67,63 @@ class StockQuoteService
             $changePercent = $response->json('results.0.regularMarketChangePercent');
             $week52Low = $response->json('results.0.fiftyTwoWeekLow');
             $week52High = $response->json('results.0.fiftyTwoWeekHigh');
+            $priceEarnings = $response->json('results.0.defaultKeyStatistics.trailingPE')
+                ?? $response->json('results.0.priceEarnings');
+            $priceToBook = $response->json('results.0.defaultKeyStatistics.priceToBook');
+            $dividendYield = $response->json('results.0.defaultKeyStatistics.dividendYield');
 
             return [
                 'price' => (float) $price,
                 'changePercent' => is_numeric($changePercent) ? (float) $changePercent : null,
                 'week52Low' => is_numeric($week52Low) ? (float) $week52Low : null,
                 'week52High' => is_numeric($week52High) ? (float) $week52High : null,
+                'priceEarnings' => is_numeric($priceEarnings) ? (float) $priceEarnings : null,
+                'priceToBook' => is_numeric($priceToBook) ? (float) $priceToBook : null,
+                'dividendYield' => is_numeric($dividendYield) ? (float) $dividendYield * 100 : null,
             ];
         } catch (\Throwable $e) {
             Log::warning("StockQuoteService: erro ao consultar cotação de {$ticker}: {$e->getMessage()}");
 
             return null;
         }
+    }
+
+    /**
+     * Fetch daily closing prices for a ticker over the given range (free on Brapi,
+     * no token required), for the price history chart on the investment detail page.
+     *
+     * @return array<int, array{date: string, close: float}>
+     */
+    public function fetchHistory(string $ticker, string $range = '6mo'): array
+    {
+        return Cache::remember("history:{$ticker}:{$range}", 3600, function () use ($ticker, $range) {
+            try {
+                $response = Http::timeout(10)->get("https://brapi.dev/api/quote/{$ticker}", array_filter([
+                    'token' => config('services.brapi.token'),
+                    'range' => $range,
+                    'interval' => '1d',
+                ]));
+
+                if (! $response->successful()) {
+                    return [];
+                }
+
+                $points = $response->json('results.0.historicalDataPrice') ?? [];
+
+                return collect($points)
+                    ->filter(fn ($point) => isset($point['date'], $point['close']))
+                    ->map(fn ($point) => [
+                        'date' => Carbon::createFromTimestamp($point['date'])->format('d/m'),
+                        'close' => (float) $point['close'],
+                    ])
+                    ->values()
+                    ->all();
+            } catch (\Throwable $e) {
+                Log::warning("StockQuoteService: erro ao consultar histórico de {$ticker}: {$e->getMessage()}");
+
+                return [];
+            }
+        });
     }
 
     /**
