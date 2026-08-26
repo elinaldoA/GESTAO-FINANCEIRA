@@ -2,11 +2,19 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class StockQuoteService
 {
+    /**
+     * Minimum time between two live requests for the same ticker. Auto-refresh
+     * (wire:poll) can trigger a fetch every few seconds from multiple open tabs;
+     * this cache absorbs that without hammering the upstream API or its rate limits.
+     */
+    private const CACHE_SECONDS = 30;
+
     /**
      * Fetch the latest price for a single ticker from the Brapi API.
      *
@@ -21,10 +29,17 @@ class StockQuoteService
 
     /**
      * Fetch the latest price, day change percent and 52-week range for a ticker.
+     * Results are cached briefly (see CACHE_SECONDS) to protect the upstream API
+     * from being hammered by auto-refresh polling.
      *
      * @return array{price: float, changePercent: ?float, week52Low: ?float, week52High: ?float}|null
      */
     public function fetchQuote(string $ticker): ?array
+    {
+        return Cache::remember("quote:{$ticker}", self::CACHE_SECONDS, fn () => $this->fetchQuoteLive($ticker));
+    }
+
+    private function fetchQuoteLive(string $ticker): ?array
     {
         try {
             $response = Http::timeout(10)->get("https://brapi.dev/api/quote/{$ticker}", array_filter([
@@ -68,6 +83,11 @@ class StockQuoteService
      * @return array{price: float, changePercent: ?float}|null
      */
     public function fetchUsdBrl(): ?array
+    {
+        return Cache::remember('quote:USDBRL', self::CACHE_SECONDS, fn () => $this->fetchUsdBrlLive());
+    }
+
+    private function fetchUsdBrlLive(): ?array
     {
         try {
             $response = Http::timeout(10)->get('https://economia.awesomeapi.com.br/last/USD-BRL');

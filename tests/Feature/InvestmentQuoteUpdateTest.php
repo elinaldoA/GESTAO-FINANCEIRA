@@ -140,4 +140,37 @@ class InvestmentQuoteUpdateTest extends TestCase
             ->assertSee('Ações banco')
             ->assertDontSee('Reserva de emergência');
     }
+
+    public function test_poll_quotes_updates_prices_silently_without_a_toast(): void
+    {
+        Http::fake([
+            'brapi.dev/api/quote/ITUB4*' => Http::response(['results' => [['regularMarketPrice' => 30.0]]]),
+        ]);
+
+        $user = User::factory()->create();
+        $investment = Investment::factory()->for($user)->create(['ticker' => 'ITUB4', 'quantity' => 5, 'current_amount' => 0]);
+
+        Volt::actingAs($user)
+            ->test('investments.index')
+            ->call('pollQuotes')
+            ->assertNotDispatched('notify');
+
+        $this->assertSame('150.00', $investment->fresh()->current_amount);
+    }
+
+    public function test_page_polls_automatically_only_when_there_are_tracked_investments(): void
+    {
+        $user = User::factory()->create();
+        Investment::factory()->for($user)->create(['ticker' => 'ITUB4', 'quantity' => 5]);
+
+        Volt::actingAs($user)->test('investments.index')->assertSee('wire:poll.60s="pollQuotes"', false);
+    }
+
+    public function test_page_does_not_poll_when_no_investment_has_a_ticker(): void
+    {
+        $user = User::factory()->create();
+        Investment::factory()->for($user)->create(['ticker' => null, 'quantity' => null]);
+
+        Volt::actingAs($user)->test('investments.index')->assertDontSee('wire:poll', false);
+    }
 }

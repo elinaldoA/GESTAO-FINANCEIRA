@@ -143,6 +143,25 @@ new #[Layout('layouts.app')] class extends Component
 
     public function refreshAllQuotes(StockQuoteService $quotes): void
     {
+        $updated = $this->updateTrackedQuotes($quotes);
+
+        $this->dispatch('notify', type: $updated > 0 ? 'success' : 'warning', message: $updated > 0
+            ? "{$updated} cotação(ões) atualizada(s)."
+            : 'Nenhum investimento com ticker cadastrado para atualizar.');
+    }
+
+    /**
+     * Silently refreshes tracked quotes on a timer (wire:poll) while the page is open,
+     * so prices update without the user having to click anything. No toast here —
+     * a notification every 60s would just be noise.
+     */
+    public function pollQuotes(StockQuoteService $quotes): void
+    {
+        $this->updateTrackedQuotes($quotes);
+    }
+
+    private function updateTrackedQuotes(StockQuoteService $quotes): int
+    {
         $investments = auth()->user()->investments()
             ->whereNotNull('ticker')->whereNotNull('quantity')->where('is_active', true)->get();
 
@@ -166,9 +185,7 @@ new #[Layout('layouts.app')] class extends Component
             $updated++;
         }
 
-        $this->dispatch('notify', type: $updated > 0 ? 'success' : 'warning', message: $updated > 0
-            ? "{$updated} cotação(ões) atualizada(s)."
-            : 'Nenhum investimento com ticker cadastrado para atualizar.');
+        return $updated;
     }
 
     public function filterByType(?int $typeId): void
@@ -303,8 +320,18 @@ new #[Layout('layouts.app')] class extends Component
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Investimentos') }}</h2>
     </x-slot>
 
-    <div class="py-8">
+    <div class="py-8" @if($hasTrackedInvestments) wire:poll.60s="pollQuotes" @endif>
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-6">
+
+            @if($hasTrackedInvestments)
+                <div class="flex items-center gap-1.5 text-xs text-gray-400">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Cotações atualizando automaticamente a cada minuto
+                </div>
+            @endif
 
             @if($marketIndices['usd'] || $marketIndices['ibovespa'])
                 <div class="flex flex-wrap gap-4 bg-white shadow-sm rounded-lg p-4">

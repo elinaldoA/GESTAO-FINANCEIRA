@@ -75,4 +75,32 @@ class StockQuoteServiceTest extends TestCase
         $this->assertSame(130000.0, $quote['price']);
         $this->assertSame(0.8, $quote['changePercent']);
     }
+
+    public function test_repeated_calls_for_the_same_ticker_are_served_from_cache(): void
+    {
+        Http::fake([
+            'brapi.dev/api/quote/PETR4*' => Http::response([
+                'results' => [['regularMarketPrice' => 40.0]],
+            ]),
+        ]);
+
+        $service = new StockQuoteService;
+        $service->fetchQuote('PETR4');
+        $service->fetchQuote('PETR4');
+        $service->fetchQuote('PETR4');
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_a_failed_fetch_is_not_cached_and_can_be_retried(): void
+    {
+        Http::fakeSequence()
+            ->push(['error' => true], 500)
+            ->push(['results' => [['regularMarketPrice' => 40.0]]]);
+
+        $service = new StockQuoteService;
+
+        $this->assertNull($service->fetchQuote('PETR4'));
+        $this->assertSame(40.0, $service->fetchQuote('PETR4')['price']);
+    }
 }
