@@ -11,9 +11,7 @@ class FinancialAlertsDigest extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(private readonly array $alerts)
-    {
-    }
+    public function __construct(private readonly array $alerts) {}
 
     public function via(object $notifiable): array
     {

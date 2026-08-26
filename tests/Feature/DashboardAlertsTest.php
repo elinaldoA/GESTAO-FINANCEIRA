@@ -67,4 +67,36 @@ class DashboardAlertsTest extends TestCase
             ->assertDontSee('tem prazo em')
             ->assertDontSee('Fatura do cartão');
     }
+
+    public function test_investment_with_big_daily_swing_generates_an_alert(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $user->investments()->create([
+            'name' => 'Ações XPTO',
+            'ticker' => 'XPTO4',
+            'quantity' => 10,
+            'invested_amount' => 1000,
+            'current_amount' => 900,
+            'day_change_percent' => -7.5,
+        ]);
+
+        Volt::test('dashboard')->assertSee('caiu 7,50% hoje');
+    }
+
+    public function test_investment_with_small_daily_swing_does_not_generate_an_alert(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $user->investments()->create([
+            'name' => 'Ações XPTO',
+            'ticker' => 'XPTO4',
+            'quantity' => 10,
+            'invested_amount' => 1000,
+            'current_amount' => 1010,
+            'day_change_percent' => 1.0,
+        ]);
+
+        Volt::test('dashboard')->assertDontSee('hoje.');
+    }
 }

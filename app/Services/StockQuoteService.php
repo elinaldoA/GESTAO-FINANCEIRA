@@ -20,9 +20,9 @@ class StockQuoteService
     }
 
     /**
-     * Fetch the latest price and day change percent for a single ticker.
+     * Fetch the latest price, day change percent and 52-week range for a ticker.
      *
-     * @return array{price: float, changePercent: ?float}|null
+     * @return array{price: float, changePercent: ?float, week52Low: ?float, week52High: ?float}|null
      */
     public function fetchQuote(string $ticker): ?array
     {
@@ -40,7 +40,44 @@ class StockQuoteService
             }
 
             $price = $response->json('results.0.regularMarketPrice');
+
+            if (! is_numeric($price)) {
+                return null;
+            }
+
             $changePercent = $response->json('results.0.regularMarketChangePercent');
+            $week52Low = $response->json('results.0.fiftyTwoWeekLow');
+            $week52High = $response->json('results.0.fiftyTwoWeekHigh');
+
+            return [
+                'price' => (float) $price,
+                'changePercent' => is_numeric($changePercent) ? (float) $changePercent : null,
+                'week52Low' => is_numeric($week52Low) ? (float) $week52Low : null,
+                'week52High' => is_numeric($week52High) ? (float) $week52High : null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("StockQuoteService: erro ao consultar cotação de {$ticker}: {$e->getMessage()}");
+
+            return null;
+        }
+    }
+
+    /**
+     * Fetch the USD/BRL exchange rate from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchUsdBrl(): ?array
+    {
+        try {
+            $response = Http::timeout(10)->get('https://economia.awesomeapi.com.br/last/USD-BRL');
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $price = $response->json('USDBRL.bid');
+            $changePercent = $response->json('USDBRL.pctChange');
 
             if (! is_numeric($price)) {
                 return null;
@@ -51,9 +88,27 @@ class StockQuoteService
                 'changePercent' => is_numeric($changePercent) ? (float) $changePercent : null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("StockQuoteService: erro ao consultar cotação de {$ticker}: {$e->getMessage()}");
+            Log::warning("StockQuoteService: erro ao consultar cotação do dólar: {$e->getMessage()}");
 
             return null;
         }
+    }
+
+    /**
+     * Fetch the Ibovespa index from Brapi. Requires a BRAPI_TOKEN (services.brapi.token) —
+     * indices are not available on Brapi's free unauthenticated tier, so this returns
+     * null (silently) when no token is configured, instead of making a doomed request.
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchIbovespa(): ?array
+    {
+        if (! config('services.brapi.token')) {
+            return null;
+        }
+
+        $quote = $this->fetchQuote('^BVSP');
+
+        return $quote === null ? null : ['price' => $quote['price'], 'changePercent' => $quote['changePercent']];
     }
 }

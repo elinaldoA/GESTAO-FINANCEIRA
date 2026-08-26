@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
 
@@ -43,5 +44,42 @@ class InvestmentPageRenderTest extends TestCase
         $page->call('filterByType', $renda->id)
             ->assertSee('CDB Banco X')
             ->assertDontSee('PETR4');
+    }
+
+    public function test_market_panel_shows_dollar_and_hides_ibovespa_without_a_token(): void
+    {
+        config(['services.brapi.token' => null]);
+        Http::fake([
+            'economia.awesomeapi.com.br/*' => Http::response([
+                'USDBRL' => ['bid' => '5.15', 'pctChange' => '0.13'],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        Volt::test('investments.index')
+            ->assertSee('Dólar')
+            ->assertSee('5,15')
+            ->assertDontSee('Ibovespa');
+    }
+
+    public function test_portfolio_history_chart_is_hidden_with_fewer_than_two_snapshots(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $user->portfolioSnapshots()->create(['date' => today(), 'total_invested' => 1000, 'total_current' => 1100]);
+
+        Volt::test('investments.index')->assertDontSee('Evolução do patrimônio');
+    }
+
+    public function test_portfolio_history_chart_shows_with_two_or_more_snapshots(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $user->portfolioSnapshots()->create(['date' => today()->subDay(), 'total_invested' => 900, 'total_current' => 950]);
+        $user->portfolioSnapshots()->create(['date' => today(), 'total_invested' => 1000, 'total_current' => 1100]);
+
+        Volt::test('investments.index')->assertSee('Evolução do patrimônio');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -61,7 +62,7 @@ class TransactionAdvancedFeaturesTest extends TestCase
 
         Volt::test('transactions.index')->call('deleteSeries', $parent);
 
-        $this->assertEquals(0, \App\Models\Transaction::count());
+        $this->assertEquals(0, Transaction::count());
     }
 
     public function test_transaction_can_have_attachment_uploaded_and_removed(): void

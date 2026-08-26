@@ -101,4 +101,10 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(CategoryRule::class);
     }
+
+    /** @return HasMany<PortfolioSnapshot, $this> */
+    public function portfolioSnapshots(): HasMany
+    {
+        return $this->hasMany(PortfolioSnapshot::class);
+    }
 }

@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('finance:send-alerts')->dailyAt('08:00');
 Schedule::command('investments:update-quotes')->hourlyAt(30)->between('10:00', '18:00')->weekdays();
+Schedule::command('portfolio:snapshot')->dailyAt('18:45')->weekdays();

@@ -91,4 +91,39 @@ document.addEventListener('alpine:init', () => {
             });
         },
     }));
+
+    Alpine.data('lineChart', (data) => ({
+        chart: null,
+        init(canvas) {
+            this.chart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Patrimônio',
+                            data: data.current,
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            tension: 0.3,
+                            fill: true,
+                        },
+                        {
+                            label: 'Investido',
+                            data: data.invested,
+                            borderColor: '#94a3b8',
+                            borderDash: [4, 4],
+                            tension: 0.3,
+                            fill: false,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: false } },
+                },
+            });
+        },
+    }));
 });

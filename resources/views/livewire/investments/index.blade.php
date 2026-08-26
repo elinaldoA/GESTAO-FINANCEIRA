@@ -3,6 +3,7 @@
 use App\Models\Investment;
 use App\Models\InvestmentType;
 use App\Services\StockQuoteService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -132,6 +133,8 @@ new #[Layout('layouts.app')] class extends Component
         $investment->update([
             'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
             'day_change_percent' => $quote['changePercent'],
+            'week52_low' => $quote['week52Low'],
+            'week52_high' => $quote['week52High'],
             'quote_updated_at' => now(),
         ]);
 
@@ -155,6 +158,8 @@ new #[Layout('layouts.app')] class extends Component
             $investment->update([
                 'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
                 'day_change_percent' => $quote['changePercent'],
+                'week52_low' => $quote['week52Low'],
+                'week52_high' => $quote['week52High'],
                 'quote_updated_at' => now(),
             ]);
 
@@ -260,6 +265,17 @@ new #[Layout('layouts.app')] class extends Component
             ->sortByDesc('current')
             ->values();
 
+        $history = $user->portfolioSnapshots()->orderBy('date')->limit(90)->get();
+
+        $marketIndices = Cache::remember('market:indices', 600, function () {
+            $quotes = app(StockQuoteService::class);
+
+            return [
+                'usd' => $quotes->fetchUsdBrl(),
+                'ibovespa' => $quotes->fetchIbovespa(),
+            ];
+        });
+
         return [
             'investments' => $investmentsQuery->paginate(10),
             'investmentTypes' => $investmentTypes,
@@ -268,10 +284,16 @@ new #[Layout('layouts.app')] class extends Component
             'totalCurrent' => $totalCurrent,
             'totalAssets' => $allInvestments->count(),
             'hasTrackedInvestments' => $allInvestments->whereNotNull('ticker')->isNotEmpty(),
+            'marketIndices' => $marketIndices,
             'allocationChart' => [
                 'labels' => $allocation->map(fn ($row) => $row['type']->name)->all(),
                 'colors' => $allocation->map(fn ($row) => $row['type']->color)->all(),
                 'totals' => $allocation->map(fn ($row) => $row['current'])->all(),
+            ],
+            'historyChart' => [
+                'labels' => $history->map(fn ($row) => $row->date->format('d/m'))->all(),
+                'invested' => $history->map(fn ($row) => (float) $row->total_invested)->all(),
+                'current' => $history->map(fn ($row) => (float) $row->total_current)->all(),
             ],
         ];
     }
@@ -283,6 +305,34 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-6">
+
+            @if($marketIndices['usd'] || $marketIndices['ibovespa'])
+                <div class="flex flex-wrap gap-4 bg-white shadow-sm rounded-lg p-4">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide self-center">Mercado hoje</span>
+                    @if($marketIndices['usd'])
+                        <div class="flex items-center gap-2 text-sm">
+                            <span class="text-gray-500">Dólar</span>
+                            <span class="font-semibold text-gray-800">R$ {{ number_format($marketIndices['usd']['price'], 2, ',', '.') }}</span>
+                            @if($marketIndices['usd']['changePercent'] !== null)
+                                <span class="{{ $marketIndices['usd']['changePercent'] >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                                    ({{ $marketIndices['usd']['changePercent'] >= 0 ? '+' : '' }}{{ number_format($marketIndices['usd']['changePercent'], 2, ',', '.') }}%)
+                                </span>
+                            @endif
+                        </div>
+                    @endif
+                    @if($marketIndices['ibovespa'])
+                        <div class="flex items-center gap-2 text-sm">
+                            <span class="text-gray-500">Ibovespa</span>
+                            <span class="font-semibold text-gray-800">{{ number_format($marketIndices['ibovespa']['price'], 0, ',', '.') }} pts</span>
+                            @if($marketIndices['ibovespa']['changePercent'] !== null)
+                                <span class="{{ $marketIndices['ibovespa']['changePercent'] >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                                    ({{ $marketIndices['ibovespa']['changePercent'] >= 0 ? '+' : '' }}{{ number_format($marketIndices['ibovespa']['changePercent'], 2, ',', '.') }}%)
+                                </span>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            @endif
 
             @php $totalGain = $totalCurrent - $totalInvested; @endphp
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -308,6 +358,18 @@ new #[Layout('layouts.app')] class extends Component
                     <p class="mt-1 text-2xl font-bold text-gray-900">{{ $totalAssets }}</p>
                 </div>
             </div>
+
+            @if(count($historyChart['labels']) >= 2)
+                <div class="bg-white shadow-sm rounded-lg p-6">
+                    <h3 class="font-semibold text-gray-800 mb-4">Evolução do patrimônio</h3>
+                    <div class="h-56" wire:ignore
+                        x-data="lineChart(@js($historyChart))"
+                        x-init="init($el.querySelector('canvas'))"
+                    >
+                        <canvas></canvas>
+                    </div>
+                </div>
+            @endif
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="bg-white shadow-sm rounded-lg p-6">
@@ -540,6 +602,17 @@ new #[Layout('layouts.app')] class extends Component
                                                 &middot; cotação de {{ $investment->quote_updated_at->diffForHumans() }}
                                             @endif
                                         </p>
+                                        @if($investment->week52_low !== null && $investment->week52_high !== null && $investment->current_price !== null && $investment->week52_high > $investment->week52_low)
+                                            @php
+                                                $rangePercent = min(100, max(0, (($investment->current_price - $investment->week52_low) / ($investment->week52_high - $investment->week52_low)) * 100));
+                                            @endphp
+                                            <div class="mt-1.5 w-32" title="Faixa de 52 semanas: R$ {{ number_format($investment->week52_low, 2, ',', '.') }} – R$ {{ number_format($investment->week52_high, 2, ',', '.') }}">
+                                                <div class="w-full bg-gray-100 rounded-full h-1">
+                                                    <div class="h-1 rounded-full bg-slate-400" style="width: {{ $rangePercent }}%"></div>
+                                                </div>
+                                                <p class="text-[10px] text-gray-400 mt-0.5">52 sem: R$ {{ number_format($investment->week52_low, 2, ',', '.') }} – R$ {{ number_format($investment->week52_high, 2, ',', '.') }}</p>
+                                            </div>
+                                        @endif
                                     @endif
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-500">

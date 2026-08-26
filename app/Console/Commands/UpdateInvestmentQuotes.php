@@ -34,6 +34,8 @@ class UpdateInvestmentQuotes extends Command
                     $investment->update([
                         'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
                         'day_change_percent' => $quote['changePercent'],
+                        'week52_low' => $quote['week52Low'],
+                        'week52_high' => $quote['week52High'],
                         'quote_updated_at' => now(),
                     ]);
 

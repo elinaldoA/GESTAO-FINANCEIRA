@@ -14,7 +14,7 @@ class Investment extends Model
     protected $fillable = [
         'user_id', 'investment_type_id', 'name', 'broker', 'ticker', 'quantity',
         'invested_amount', 'current_amount', 'color', 'is_active',
-        'quote_updated_at', 'day_change_percent',
+        'quote_updated_at', 'day_change_percent', 'week52_low', 'week52_high',
     ];
 
     protected $casts = [
@@ -22,6 +22,8 @@ class Investment extends Model
         'current_amount' => 'decimal:2',
         'quantity' => 'decimal:8',
         'day_change_percent' => 'decimal:2',
+        'week52_low' => 'decimal:2',
+        'week52_high' => 'decimal:2',
         'is_active' => 'boolean',
         'quote_updated_at' => 'datetime',
     ];
@@ -48,5 +50,14 @@ class Investment extends Model
         }
 
         return ($this->gain / (float) $this->invested_amount) * 100;
+    }
+
+    public function getCurrentPriceAttribute(): ?float
+    {
+        if (! $this->quantity || (float) $this->quantity <= 0) {
+            return null;
+        }
+
+        return (float) $this->current_amount / (float) $this->quantity;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -95,6 +96,6 @@ class InstallmentPurchaseTest extends TestCase
 
         Volt::test('transactions.index')->call('deleteSeries', $parent);
 
-        $this->assertEquals(0, \App\Models\Transaction::count());
+        $this->assertEquals(0, Transaction::count());
     }
 }

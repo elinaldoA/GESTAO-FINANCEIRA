@@ -59,6 +59,21 @@ class FinancialAlerts
             }
         }
 
+        foreach ($user->investments()->where('is_active', true)->whereNotNull('day_change_percent')->get() as $investment) {
+            $change = (float) $investment->day_change_percent;
+
+            if (abs($change) >= 5) {
+                $direction = $change >= 0 ? 'subiu' : 'caiu';
+                $formattedChange = number_format(abs($change), 2, ',', '.');
+
+                $alerts[] = [
+                    'severity' => $change < 0 ? 'warning' : 'info',
+                    'message' => "\"{$investment->name}\" ({$investment->ticker}) {$direction} {$formattedChange}% hoje.",
+                    'url' => route('investments.index'),
+                ];
+            }
+        }
+
         return $alerts;
     }
 }
