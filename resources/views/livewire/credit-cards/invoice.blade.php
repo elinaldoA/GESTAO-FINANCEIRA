@@ -2,14 +2,18 @@
 
 use App\Models\CreditCard;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
     public CreditCard $creditCard;
+
     public int $year;
+
     public int $month;
+
     public ?int $payFromAccountId = null;
 
     public function mount(CreditCard $creditCard): void
@@ -37,7 +41,9 @@ new #[Layout('layouts.app')] class extends Component
 
     public function payInvoice(): void
     {
-        $this->validate(['payFromAccountId' => 'required|exists:accounts,id']);
+        $this->validate([
+            'payFromAccountId' => ['required', Rule::exists('accounts', 'id')->where('user_id', auth()->id())],
+        ]);
 
         $openTransactions = $this->creditCard->invoiceTransactionsQuery($this->year, $this->month)
             ->where('invoice_paid', false)->get();

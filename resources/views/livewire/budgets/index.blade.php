@@ -1,19 +1,20 @@
 <?php
 
 use App\Models\Budget;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    #[Validate('required|exists:categories,id')]
     public ?int $category_id = null;
 
     #[Validate('required|numeric|min:0.01')]
     public string $amount = '';
 
     public string $month;
+
     public string $year;
 
     public ?int $editingId = null;
@@ -26,7 +27,10 @@ new #[Layout('layouts.app')] class extends Component
 
     public function save(): void
     {
-        $this->validate();
+        $this->validate([
+            'category_id' => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
+            'amount' => 'required|numeric|min:0.01',
+        ]);
 
         $isNew = $this->editingId === null;
 

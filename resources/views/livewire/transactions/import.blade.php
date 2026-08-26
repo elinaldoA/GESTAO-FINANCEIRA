@@ -2,6 +2,7 @@
 
 use App\Models\CategoryRule;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -11,15 +12,23 @@ new #[Layout('layouts.app')] class extends Component
     use WithFileUploads;
 
     public $file = null;
+
     public array $headers = [];
+
     public array $previewRows = [];
 
     public string $dateColumn = '';
+
     public string $descriptionColumn = '';
+
     public string $amountColumn = '';
+
     public string $dateFormat = 'd/m/Y';
+
     public string $decimalSeparator = ',';
+
     public ?int $account_id = null;
+
     public ?int $category_id = null;
 
     public function updatedFile(): void
@@ -85,7 +94,7 @@ new #[Layout('layouts.app')] class extends Component
             'dateColumn' => 'required',
             'descriptionColumn' => 'required',
             'amountColumn' => 'required',
-            'account_id' => 'required|exists:accounts,id',
+            'account_id' => ['required', Rule::exists('accounts', 'id')->where('user_id', auth()->id())],
         ]);
 
         $delimiter = $this->detectDelimiter();
@@ -151,7 +160,7 @@ new #[Layout('layouts.app')] class extends Component
                 ]);
 
                 $imported++;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $failed++;
             }
         }

@@ -2,6 +2,7 @@
 
 use App\Models\Category;
 use App\Models\CategoryRule;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use Livewire\Volt\Component;
@@ -20,7 +21,9 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $editingId = null;
 
     public string $ruleKeyword = '';
+
     public ?int $ruleCategoryId = null;
+
     public bool $showRuleManager = false;
 
     public function save(): void
@@ -71,8 +74,8 @@ new #[Layout('layouts.app')] class extends Component
     public function addRule(): void
     {
         $this->validate([
-            'ruleKeyword' => ['required', 'string', 'max:255', \Illuminate\Validation\Rule::unique('category_rules', 'keyword')->where('user_id', auth()->id())],
-            'ruleCategoryId' => 'required|exists:categories,id',
+            'ruleKeyword' => ['required', 'string', 'max:255', Rule::unique('category_rules', 'keyword')->where('user_id', auth()->id())],
+            'ruleCategoryId' => ['required', Rule::exists('categories', 'id')->where('user_id', auth()->id())],
         ]);
 
         auth()->user()->categoryRules()->create([

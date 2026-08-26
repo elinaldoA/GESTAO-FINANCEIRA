@@ -2,7 +2,9 @@
 
 use App\Models\CategoryRule;
 use App\Models\Transaction;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Attributes\Validate;
@@ -12,7 +14,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination, WithFileUploads;
+    use WithFileUploads, WithPagination;
 
     #[Validate('required|string|max:255')]
     public string $description = '';
@@ -27,30 +29,44 @@ new #[Layout('layouts.app')] class extends Component
     public string $type = 'despesa';
 
     public string $payment_method = 'pix';
+
     public ?int $account_id = null;
+
     public ?int $credit_card_id = null;
+
     public ?int $destination_account_id = null;
+
     public ?int $category_id = null;
+
     public bool $is_paid = true;
+
     public string $notes = '';
 
     public bool $is_recurring = false;
+
     public string $recurrence_interval = 'mensal';
+
     public int $recurrence_count = 12;
 
     public int $installments = 1;
 
     public $attachment = null;
+
     public ?string $existingAttachmentPath = null;
+
     public ?string $existingAttachmentName = null;
 
     public ?int $editingId = null;
 
     // filters
     public string $filterType = '';
+
     public string $filterMonth = '';
+
     public ?int $filterCategoryId = null;
+
     public string $filterPaymentMethod = '';
+
     public string $filterReconciled = '';
 
     #[Url(as: 'busca', except: '')]
@@ -58,7 +74,9 @@ new #[Layout('layouts.app')] class extends Component
 
     // bulk actions
     public array $selected = [];
+
     public bool $selectAllPage = false;
+
     public string $bulkCategoryId = '';
 
     public function mount(): void
@@ -128,6 +146,12 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
+        $categoryOwned = auth()->user()->categories()->whereKey($this->bulkCategoryId)->exists();
+
+        if (! $categoryOwned) {
+            abort(403);
+        }
+
         auth()->user()->transactions()->whereIn('id', $this->selected)->update(['category_id' => $this->bulkCategoryId]);
         $this->dispatch('notify', type: 'success', message: 'Categoria aplicada às transações selecionadas.');
         $this->bulkCategoryId = '';
@@ -170,19 +194,23 @@ new #[Layout('layouts.app')] class extends Component
             'type' => 'required|in:receita,despesa,transferencia',
         ];
 
+        $ownAccount = Rule::exists('accounts', 'id')->where('user_id', auth()->id());
+        $ownCategory = Rule::exists('categories', 'id')->where('user_id', auth()->id());
+        $ownCreditCard = Rule::exists('credit_cards', 'id')->where('user_id', auth()->id());
+
         if ($this->type === 'transferencia') {
-            $rules['account_id'] = 'required|exists:accounts,id';
-            $rules['destination_account_id'] = 'required|different:account_id|exists:accounts,id';
+            $rules['account_id'] = ['required', $ownAccount];
+            $rules['destination_account_id'] = ['required', 'different:account_id', $ownAccount];
         } else {
-            $rules['category_id'] = 'nullable|exists:categories,id';
+            $rules['category_id'] = ['nullable', $ownCategory];
             $rules['payment_method'] = $this->type === 'despesa'
                 ? 'required|in:pix,debito,credito,dinheiro,boleto,outro'
                 : 'required|in:pix,debito,dinheiro,boleto,outro';
 
             if ($this->type === 'despesa' && $this->payment_method === 'credito') {
-                $rules['credit_card_id'] = 'required|exists:credit_cards,id';
+                $rules['credit_card_id'] = ['required', $ownCreditCard];
             } else {
-                $rules['account_id'] = 'required|exists:accounts,id';
+                $rules['account_id'] = ['required', $ownAccount];
             }
         }
 
@@ -264,7 +292,7 @@ new #[Layout('layouts.app')] class extends Component
         $n = $this->installments;
         $each = round($total / $n, 2);
         $roundingAdjustment = round($total - ($each * $n), 2);
-        $firstDate = \Illuminate\Support\Carbon::parse($baseData['date']);
+        $firstDate = Carbon::parse($baseData['date']);
         $baseDescription = $baseData['description'];
 
         $first = null;
