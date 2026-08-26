@@ -18,7 +18,7 @@ class InvestmentQuoteUpdateTest extends TestCase
     {
         Http::fake([
             'brapi.dev/api/quote/PETR4*' => Http::response([
-                'results' => [['regularMarketPrice' => 40.0]],
+                'results' => [['regularMarketPrice' => 40.0, 'regularMarketChangePercent' => 1.5]],
             ]),
         ]);
 
@@ -32,6 +32,7 @@ class InvestmentQuoteUpdateTest extends TestCase
         $this->artisan(UpdateInvestmentQuotes::class)->assertSuccessful();
 
         $this->assertSame('400.00', $investment->fresh()->current_amount);
+        $this->assertSame('1.50', $investment->fresh()->day_change_percent);
         $this->assertNotNull($investment->fresh()->quote_updated_at);
     }
 
@@ -104,5 +105,39 @@ class InvestmentQuoteUpdateTest extends TestCase
             ->test('investments.index')
             ->call('refreshQuote', $investment->id)
             ->assertForbidden();
+    }
+
+    public function test_user_can_refresh_all_tracked_investments_at_once(): void
+    {
+        Http::fake([
+            'brapi.dev/api/quote/ITUB4*' => Http::response(['results' => [['regularMarketPrice' => 30.0]]]),
+            'brapi.dev/api/quote/VALE3*' => Http::response(['results' => [['regularMarketPrice' => 70.0]]]),
+        ]);
+
+        $user = User::factory()->create();
+        $itub = Investment::factory()->for($user)->create(['ticker' => 'ITUB4', 'quantity' => 5, 'current_amount' => 0]);
+        $vale = Investment::factory()->for($user)->create(['ticker' => 'VALE3', 'quantity' => 2, 'current_amount' => 0]);
+        $manual = Investment::factory()->for($user)->create(['ticker' => null, 'quantity' => null, 'current_amount' => 999]);
+
+        Volt::actingAs($user)
+            ->test('investments.index')
+            ->call('refreshAllQuotes');
+
+        $this->assertSame('150.00', $itub->fresh()->current_amount);
+        $this->assertSame('140.00', $vale->fresh()->current_amount);
+        $this->assertSame('999.00', $manual->fresh()->current_amount);
+    }
+
+    public function test_search_filters_investments_by_name_ticker_or_broker(): void
+    {
+        $user = User::factory()->create();
+        Investment::factory()->for($user)->create(['name' => 'Reserva de emergência', 'ticker' => null, 'broker' => 'Nubank']);
+        Investment::factory()->for($user)->create(['name' => 'Ações banco', 'ticker' => 'ITUB4', 'broker' => 'XP']);
+
+        Volt::actingAs($user)
+            ->test('investments.index')
+            ->set('search', 'ITUB4')
+            ->assertSee('Ações banco')
+            ->assertDontSee('Reserva de emergência');
     }
 }

@@ -5,6 +5,7 @@ use App\Models\InvestmentType;
 use App\Services\StockQuoteService;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -37,6 +38,9 @@ new #[Layout('layouts.app')] class extends Component
     public ?int $filterTypeId = null;
 
     public bool $showTypeManager = false;
+
+    #[Url(as: 'busca', except: '')]
+    public string $search = '';
 
     public function mount(): void
     {
@@ -117,25 +121,59 @@ new #[Layout('layouts.app')] class extends Component
             return;
         }
 
-        $price = $quotes->fetchPrice($investment->ticker);
+        $quote = $quotes->fetchQuote($investment->ticker);
 
-        if ($price === null) {
+        if ($quote === null) {
             $this->dispatch('notify', type: 'error', message: "Não foi possível obter a cotação de {$investment->ticker} agora.");
 
             return;
         }
 
         $investment->update([
-            'current_amount' => round($price * (float) $investment->quantity, 2),
+            'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
+            'day_change_percent' => $quote['changePercent'],
             'quote_updated_at' => now(),
         ]);
 
         $this->dispatch('notify', type: 'success', message: "Cotação de {$investment->ticker} atualizada.");
     }
 
+    public function refreshAllQuotes(StockQuoteService $quotes): void
+    {
+        $investments = auth()->user()->investments()
+            ->whereNotNull('ticker')->whereNotNull('quantity')->where('is_active', true)->get();
+
+        $updated = 0;
+
+        foreach ($investments as $investment) {
+            $quote = $quotes->fetchQuote($investment->ticker);
+
+            if ($quote === null) {
+                continue;
+            }
+
+            $investment->update([
+                'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
+                'day_change_percent' => $quote['changePercent'],
+                'quote_updated_at' => now(),
+            ]);
+
+            $updated++;
+        }
+
+        $this->dispatch('notify', type: $updated > 0 ? 'success' : 'warning', message: $updated > 0
+            ? "{$updated} cotação(ões) atualizada(s)."
+            : 'Nenhum investimento com ticker cadastrado para atualizar.');
+    }
+
     public function filterByType(?int $typeId): void
     {
         $this->filterTypeId = $typeId;
+        $this->resetPage();
+    }
+
+    public function updatedSearch(): void
+    {
         $this->resetPage();
     }
 
@@ -199,6 +237,13 @@ new #[Layout('layouts.app')] class extends Component
         if ($this->filterTypeId) {
             $investmentsQuery->where('investment_type_id', $this->filterTypeId);
         }
+        if ($this->search !== '') {
+            $investmentsQuery->where(function ($query) {
+                $query->where('name', 'like', "%{$this->search}%")
+                    ->orWhere('ticker', 'like', "%{$this->search}%")
+                    ->orWhere('broker', 'like', "%{$this->search}%");
+            });
+        }
 
         $totalInvested = (float) $allInvestments->sum('invested_amount');
         $totalCurrent = (float) $allInvestments->sum('current_amount');
@@ -222,6 +267,7 @@ new #[Layout('layouts.app')] class extends Component
             'totalInvested' => $totalInvested,
             'totalCurrent' => $totalCurrent,
             'totalAssets' => $allInvestments->count(),
+            'hasTrackedInvestments' => $allInvestments->whereNotNull('ticker')->isNotEmpty(),
             'allocationChart' => [
                 'labels' => $allocation->map(fn ($row) => $row['type']->name)->all(),
                 'colors' => $allocation->map(fn ($row) => $row['type']->color)->all(),
@@ -303,6 +349,29 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             </div>
 
+            <div class="flex flex-wrap items-center gap-3 bg-white shadow-sm rounded-lg p-4">
+                <div class="flex-1 min-w-[220px]">
+                    <input
+                        type="search"
+                        wire:model.live.debounce.400ms="search"
+                        placeholder="Buscar por nome, ticker ou corretora..."
+                        class="block w-full rounded-md border-gray-300 shadow-sm text-sm"
+                    >
+                </div>
+                @if($hasTrackedInvestments)
+                    <button
+                        type="button"
+                        wire:click="refreshAllQuotes"
+                        wire:loading.attr="disabled"
+                        wire:target="refreshAllQuotes"
+                        class="px-3 py-1.5 rounded-md text-sm font-medium text-indigo-600 border border-indigo-200 hover:bg-indigo-50 disabled:opacity-50"
+                    >
+                        <span wire:loading.remove wire:target="refreshAllQuotes">Atualizar cotações</span>
+                        <span wire:loading wire:target="refreshAllQuotes">Atualizando…</span>
+                    </button>
+                @endif
+            </div>
+
             <div class="flex flex-wrap items-center gap-2 bg-white shadow-sm rounded-lg p-2">
                 <button
                     type="button"
@@ -367,53 +436,65 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="bg-white shadow-sm rounded-lg p-6">
                 <h3 class="font-semibold text-gray-800 mb-4">{{ $editingId ? 'Editar investimento' : 'Novo investimento' }}</h3>
-                <form wire:submit="save" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                    <div class="sm:col-span-2">
-                        <x-input-label for="name" value="Nome" />
-                        <x-text-input id="name" type="text" class="mt-1 block w-full" wire:model="name" placeholder="Ex: Tesouro Selic 2029" />
-                        <x-input-error :messages="$errors->get('name')" class="mt-1" />
+                <form wire:submit="save" class="space-y-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-4">
+                        <div class="sm:col-span-3">
+                            <x-input-label for="name" value="Nome" />
+                            <x-text-input id="name" type="text" class="mt-1 block w-full" wire:model="name" placeholder="Ex: Tesouro Selic 2029" />
+                            <x-input-error :messages="$errors->get('name')" class="mt-1" />
+                        </div>
+                        <div class="sm:col-span-2">
+                            <x-input-label for="investment_type_id" value="Tipo" />
+                            <select id="investment_type_id" wire:model="investment_type_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                <option value="">Selecione…</option>
+                                @foreach ($investmentTypes as $type)
+                                    <option value="{{ $type->id }}">{{ $type->name }}</option>
+                                @endforeach
+                            </select>
+                            <x-input-error :messages="$errors->get('investment_type_id')" class="mt-1" />
+                        </div>
+                        <div>
+                            <x-input-label for="color" value="Cor" />
+                            <input id="color" type="color" wire:model="color" class="mt-1 block w-full h-10 rounded-md border-gray-300 shadow-sm" />
+                        </div>
                     </div>
-                    <div>
-                        <x-input-label for="investment_type_id" value="Tipo" />
-                        <select id="investment_type_id" wire:model="investment_type_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                            <option value="">Selecione…</option>
-                            @foreach ($investmentTypes as $type)
-                                <option value="{{ $type->id }}">{{ $type->name }}</option>
-                            @endforeach
-                        </select>
-                        <x-input-error :messages="$errors->get('investment_type_id')" class="mt-1" />
+
+                    <div class="border-t border-gray-100 pt-5">
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Cotação automática (opcional)</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-6 gap-4">
+                            <div class="sm:col-span-2">
+                                <x-input-label for="broker" value="Corretora" />
+                                <x-text-input id="broker" type="text" class="mt-1 block w-full" wire:model="broker" placeholder="Opcional" />
+                                <x-input-error :messages="$errors->get('broker')" class="mt-1" />
+                            </div>
+                            <div class="sm:col-span-2">
+                                <x-input-label for="ticker" value="Ticker (B3)" />
+                                <x-text-input id="ticker" type="text" class="mt-1 block w-full" wire:model="ticker" placeholder="Ex: ITUB4" />
+                                <x-input-error :messages="$errors->get('ticker')" class="mt-1" />
+                            </div>
+                            <div class="sm:col-span-2">
+                                <x-input-label for="quantity" value="Quantidade" />
+                                <x-text-input id="quantity" type="number" step="0.00000001" class="mt-1 block w-full" wire:model="quantity" placeholder="Nº de cotas/ações" />
+                                <x-input-error :messages="$errors->get('quantity')" class="mt-1" />
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">Preenchendo ticker e quantidade, o "Valor atual" é atualizado automaticamente a partir da cotação de mercado.</p>
                     </div>
-                    <div>
-                        <x-input-label for="broker" value="Corretora" />
-                        <x-text-input id="broker" type="text" class="mt-1 block w-full" wire:model="broker" placeholder="Opcional" />
-                        <x-input-error :messages="$errors->get('broker')" class="mt-1" />
+
+                    <div class="border-t border-gray-100 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <x-input-label for="invested_amount" value="Valor investido" />
+                            <x-text-input id="invested_amount" type="number" step="0.01" class="mt-1 block w-full" wire:model="invested_amount" />
+                            <x-input-error :messages="$errors->get('invested_amount')" class="mt-1" />
+                        </div>
+                        <div>
+                            <x-input-label for="current_amount" value="Valor atual" />
+                            <x-text-input id="current_amount" type="number" step="0.01" class="mt-1 block w-full" wire:model="current_amount" />
+                            <x-input-error :messages="$errors->get('current_amount')" class="mt-1" />
+                        </div>
                     </div>
-                    <div>
-                        <x-input-label for="ticker" value="Ticker (B3)" />
-                        <x-text-input id="ticker" type="text" class="mt-1 block w-full" wire:model="ticker" placeholder="Ex: ITUB4" />
-                        <x-input-error :messages="$errors->get('ticker')" class="mt-1" />
-                        <p class="text-xs text-gray-400 mt-1">Opcional. Se preenchido, permite atualizar a cotação automaticamente.</p>
-                    </div>
-                    <div>
-                        <x-input-label for="quantity" value="Quantidade" />
-                        <x-text-input id="quantity" type="number" step="0.00000001" class="mt-1 block w-full" wire:model="quantity" placeholder="Nº de cotas/ações" />
-                        <x-input-error :messages="$errors->get('quantity')" class="mt-1" />
-                    </div>
-                    <div>
-                        <x-input-label for="invested_amount" value="Valor investido" />
-                        <x-text-input id="invested_amount" type="number" step="0.01" class="mt-1 block w-full" wire:model="invested_amount" />
-                        <x-input-error :messages="$errors->get('invested_amount')" class="mt-1" />
-                    </div>
-                    <div>
-                        <x-input-label for="current_amount" value="Valor atual" />
-                        <x-text-input id="current_amount" type="number" step="0.01" class="mt-1 block w-full" wire:model="current_amount" />
-                        <x-input-error :messages="$errors->get('current_amount')" class="mt-1" />
-                    </div>
-                    <div>
-                        <x-input-label for="color" value="Cor" />
-                        <input id="color" type="color" wire:model="color" class="mt-1 block w-full h-10 rounded-md border-gray-300 shadow-sm" />
-                    </div>
-                    <div class="sm:col-span-4 flex gap-2">
+
+                    <div class="flex gap-2">
                         <x-primary-button type="submit">{{ $editingId ? 'Salvar alterações' : 'Adicionar investimento' }}</x-primary-button>
                         @if($editingId)
                             <x-secondary-button type="button" wire:click="cancelEdit">Cancelar</x-secondary-button>
@@ -450,6 +531,11 @@ new #[Layout('layouts.app')] class extends Component
                                     @if($investment->ticker)
                                         <p class="text-xs text-gray-400 mt-0.5">
                                             {{ $investment->ticker }}
+                                            @if($investment->day_change_percent !== null)
+                                                <span class="{{ $investment->day_change_percent >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                                                    ({{ $investment->day_change_percent >= 0 ? '+' : '' }}{{ number_format($investment->day_change_percent, 2, ',', '.') }}% hoje)
+                                                </span>
+                                            @endif
                                             @if($investment->quote_updated_at)
                                                 &middot; cotação de {{ $investment->quote_updated_at->diffForHumans() }}
                                             @endif
@@ -489,7 +575,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="px-6 py-6 text-center text-sm text-gray-500">Nenhum investimento cadastrado.</td></tr>
+                            <tr><td colspan="8" class="px-6 py-6 text-center text-sm text-gray-500">{{ $search !== '' ? 'Nenhum investimento encontrado para "'.$search.'".' : 'Nenhum investimento cadastrado.' }}</td></tr>
                         @endforelse
                     </tbody>
                 </table>

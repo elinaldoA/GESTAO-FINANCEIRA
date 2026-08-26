@@ -23,16 +23,17 @@ class UpdateInvestmentQuotes extends Command
             ->where('is_active', true)
             ->chunkById(100, function ($investments) use ($quotes, &$updated, &$failed) {
                 foreach ($investments as $investment) {
-                    $price = $quotes->fetchPrice($investment->ticker);
+                    $quote = $quotes->fetchQuote($investment->ticker);
 
-                    if ($price === null) {
+                    if ($quote === null) {
                         $failed++;
 
                         continue;
                     }
 
                     $investment->update([
-                        'current_amount' => round($price * (float) $investment->quantity, 2),
+                        'current_amount' => round($quote['price'] * (float) $investment->quantity, 2),
+                        'day_change_percent' => $quote['changePercent'],
                         'quote_updated_at' => now(),
                     ]);
 

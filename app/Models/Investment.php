@@ -13,13 +13,15 @@ class Investment extends Model
 
     protected $fillable = [
         'user_id', 'investment_type_id', 'name', 'broker', 'ticker', 'quantity',
-        'invested_amount', 'current_amount', 'color', 'is_active', 'quote_updated_at',
+        'invested_amount', 'current_amount', 'color', 'is_active',
+        'quote_updated_at', 'day_change_percent',
     ];
 
     protected $casts = [
         'invested_amount' => 'decimal:2',
         'current_amount' => 'decimal:2',
         'quantity' => 'decimal:8',
+        'day_change_percent' => 'decimal:2',
         'is_active' => 'boolean',
         'quote_updated_at' => 'datetime',
     ];
