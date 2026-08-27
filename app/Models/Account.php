@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Account extends Model
 {
@@ -38,11 +39,22 @@ class Account extends Model
 
     public function getCurrentBalanceAttribute(): float
     {
-        $income = $this->transactions()->where('type', 'receita')->where('is_paid', true)->sum('amount');
-        $expense = $this->transactions()->where('type', 'despesa')->where('is_paid', true)->sum('amount');
-        $transferOut = $this->transactions()->where('type', 'transferencia')->where('is_paid', true)->sum('amount');
-        $transferIn = $this->incomingTransfers()->where('type', 'transferencia')->where('is_paid', true)->sum('amount');
+        $totals = DB::table('transactions')
+            ->where('is_paid', true)
+            ->whereNull('deleted_at')
+            ->where(function ($query) {
+                $query->where('account_id', $this->id)->orWhere('destination_account_id', $this->id);
+            })
+            ->selectRaw("SUM(CASE WHEN account_id = ? AND type = 'receita' THEN amount ELSE 0 END) AS income", [$this->id])
+            ->selectRaw("SUM(CASE WHEN account_id = ? AND type = 'despesa' THEN amount ELSE 0 END) AS expense", [$this->id])
+            ->selectRaw("SUM(CASE WHEN account_id = ? AND type = 'transferencia' THEN amount ELSE 0 END) AS transfer_out", [$this->id])
+            ->selectRaw("SUM(CASE WHEN destination_account_id = ? AND type = 'transferencia' THEN amount ELSE 0 END) AS transfer_in", [$this->id])
+            ->first();
 
-        return (float) $this->initial_balance + $income - $expense - $transferOut + $transferIn;
+        return (float) $this->initial_balance
+            + (float) ($totals->income ?? 0)
+            - (float) ($totals->expense ?? 0)
+            - (float) ($totals->transfer_out ?? 0)
+            + (float) ($totals->transfer_in ?? 0);
     }
 }

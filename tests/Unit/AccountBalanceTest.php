@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AccountBalanceTest extends TestCase
@@ -54,5 +55,29 @@ class AccountBalanceTest extends TestCase
 
         $this->assertSame(120.0, $origin->current_balance);
         $this->assertSame(80.0, $destination->current_balance);
+    }
+
+    public function test_soft_deleted_transactions_do_not_affect_the_balance(): void
+    {
+        $user = User::factory()->create();
+        $account = Account::factory()->for($user)->create(['initial_balance' => 100]);
+
+        Transaction::factory()->for($user)->for($account)->despesa()->create(['amount' => 999])->delete();
+
+        $this->assertSame(100.0, $account->current_balance);
+    }
+
+    public function test_current_balance_is_computed_with_a_single_query(): void
+    {
+        $user = User::factory()->create();
+        $account = Account::factory()->for($user)->create(['initial_balance' => 100]);
+        Transaction::factory()->for($user)->for($account)->receita()->create(['amount' => 50]);
+
+        DB::enableQueryLog();
+        $account->current_balance;
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertSame(1, $queryCount);
     }
 }

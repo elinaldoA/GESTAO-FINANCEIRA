@@ -2,6 +2,7 @@
 
 use App\Models\CategoryRule;
 use App\Models\Transaction;
+use App\Support\CategoryRuleSuggester;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -58,6 +59,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public ?int $editingId = null;
 
+    public ?array $ruleSuggestion = null;
+
     // filters
     public string $filterType = '';
 
@@ -71,6 +74,8 @@ new #[Layout('layouts.app')] class extends Component
 
     #[Url(as: 'busca', except: '')]
     public string $filterSearch = '';
+
+    public bool $searchFallbackUsed = false;
 
     // bulk actions
     public array $selected = [];
@@ -236,6 +241,8 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->validate($rules);
 
+        $wasManuallyCategorized = (bool) $this->category_id;
+
         $resolvedCategoryId = $this->category_id;
         if ($this->type !== 'transferencia' && ! $resolvedCategoryId) {
             $resolvedCategoryId = CategoryRule::matchCategoryFor(auth()->id(), $this->description);
@@ -281,9 +288,34 @@ new #[Layout('layouts.app')] class extends Component
 
         $this->checkBudgetAlert($transaction);
 
+        if ($wasManuallyCategorized && $this->type !== 'transferencia') {
+            $this->ruleSuggestion = CategoryRuleSuggester::suggestFor(auth()->id(), $transaction);
+        }
+
         $this->resetForm();
 
         $this->dispatch('notify', type: 'success', message: $isNew ? 'Transação adicionada com sucesso.' : 'Transação atualizada com sucesso.');
+    }
+
+    public function acceptRuleSuggestion(): void
+    {
+        if (! $this->ruleSuggestion) {
+            return;
+        }
+
+        auth()->user()->categoryRules()->create([
+            'category_id' => $this->ruleSuggestion['category_id'],
+            'keyword' => $this->ruleSuggestion['keyword'],
+        ]);
+
+        $this->ruleSuggestion = null;
+
+        $this->dispatch('notify', type: 'success', message: 'Regra automática criada com sucesso.');
+    }
+
+    public function dismissRuleSuggestion(): void
+    {
+        $this->ruleSuggestion = null;
     }
 
     private function createInstallmentPurchase(array $baseData): Transaction
@@ -489,13 +521,104 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         if ($this->filterSearch) {
-            $query->where(function ($q) {
-                $q->where('description', 'like', '%'.$this->filterSearch.'%')
-                    ->orWhere('notes', 'like', '%'.$this->filterSearch.'%');
+            $searchWords = $this->resolveSearchWords($this->filterSearch);
+
+            $query->where(function ($q) use ($searchWords) {
+                foreach ($searchWords as $word) {
+                    $q->where(function ($sub) use ($word) {
+                        $sub->where('description', 'like', '%'.$word.'%')
+                            ->orWhere('notes', 'like', '%'.$word.'%');
+                    });
+                }
             });
+        } else {
+            $this->searchFallbackUsed = false;
         }
 
         return $query;
+    }
+
+    /**
+     * Splits the search term into words (so "mercado extra" also matches "Extra
+     * Mercado Ltda"), and for any word with no direct match, tries the closest word
+     * actually used in the user's transaction descriptions (typo tolerance). Runs one
+     * `exists()` check per word — cheap for the handful of words a real search has —
+     * and only builds the vocabulary for approximate matching when a word needs it.
+     *
+     * @return array<int, string>
+     */
+    private function resolveSearchWords(string $term): array
+    {
+        $words = collect(preg_split('/\s+/u', trim($term)))->filter()->values();
+
+        if ($words->isEmpty()) {
+            return [$term];
+        }
+
+        $vocabulary = null;
+        $resolved = [];
+        $usedFallback = false;
+
+        foreach ($words as $word) {
+            $hasDirectMatch = auth()->user()->transactions()
+                ->where(fn ($q) => $q->where('description', 'like', '%'.$word.'%')->orWhere('notes', 'like', '%'.$word.'%'))
+                ->exists();
+
+            if ($hasDirectMatch) {
+                $resolved[] = $word;
+
+                continue;
+            }
+
+            $vocabulary ??= $this->searchVocabulary();
+            $closest = $this->closestVocabularyWord($word, $vocabulary);
+
+            if ($closest !== null) {
+                $resolved[] = $closest;
+                $usedFallback = true;
+            } else {
+                $resolved[] = $word;
+            }
+        }
+
+        $this->searchFallbackUsed = $usedFallback;
+
+        return $resolved;
+    }
+
+    /** @return array<int, string> */
+    private function searchVocabulary(): array
+    {
+        return auth()->user()->transactions()
+            ->orderByDesc('date')
+            ->limit(500)
+            ->pluck('description')
+            ->flatMap(fn ($description) => preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($description)))
+            ->filter(fn ($word) => mb_strlen($word) >= 3)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** @param  array<int, string>  $vocabulary */
+    private function closestVocabularyWord(string $word, array $vocabulary): ?string
+    {
+        $needle = mb_strtolower($word);
+        $maxDistance = max(1, (int) floor(mb_strlen($needle) / 4));
+
+        $best = null;
+        $bestDistance = null;
+
+        foreach ($vocabulary as $candidate) {
+            $distance = levenshtein($needle, $candidate);
+
+            if ($distance <= $maxDistance && ($bestDistance === null || $distance < $bestDistance)) {
+                $best = $candidate;
+                $bestDistance = $distance;
+            }
+        }
+
+        return $best;
     }
 
     public function exportCsv()
@@ -548,6 +671,18 @@ new #[Layout('layouts.app')] class extends Component
 
     <div class="py-8">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-6">
+
+            @if($ruleSuggestion)
+                <div class="flex flex-wrap items-center gap-3 p-3 rounded-lg text-sm bg-blue-50 border border-blue-100 text-blue-800">
+                    <span>💡</span>
+                    <span class="flex-1">
+                        Você categorizou {{ $ruleSuggestion['count'] }} transações com "{{ $ruleSuggestion['keyword'] }}" como <strong>{{ $ruleSuggestion['category_name'] }}</strong>.
+                        Quer criar uma regra automática para categorizar futuras transações assim?
+                    </span>
+                    <button type="button" wire:click="acceptRuleSuggestion" class="font-semibold text-blue-700 hover:underline">Criar regra</button>
+                    <button type="button" wire:click="dismissRuleSuggestion" class="text-blue-500 hover:underline">Agora não</button>
+                </div>
+            @endif
 
             <div class="bg-white shadow-sm rounded-lg p-6">
                 <h3 class="font-semibold text-gray-800 mb-4">{{ $editingId ? 'Editar transação' : 'Nova transação' }}</h3>
@@ -733,6 +868,9 @@ new #[Layout('layouts.app')] class extends Component
                 <div>
                     <x-input-label value="Buscar" />
                     <x-text-input type="text" class="mt-1" wire:model.live.debounce.400ms="filterSearch" placeholder="Descrição ou observação..." />
+                    @if($searchFallbackUsed)
+                        <p class="text-xs text-amber-600 mt-1">Mostrando resultados aproximados (nenhuma correspondência exata para "{{ $filterSearch }}").</p>
+                    @endif
                 </div>
                 <div>
                     <x-input-label value="Mês" />

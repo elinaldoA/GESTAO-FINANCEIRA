@@ -75,4 +75,59 @@ class TransactionSearchTest extends TestCase
             ->assertSee('Compra antiga')
             ->assertSee('Compra deste mês');
     }
+
+    public function test_search_words_match_regardless_of_order(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'type' => 'despesa',
+            'description' => 'Extra Mercado Ltda', 'amount' => 90, 'date' => now(),
+        ]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'type' => 'despesa',
+            'description' => 'Farmacia', 'amount' => 30, 'date' => now(),
+        ]);
+
+        Volt::test('transactions.index')
+            ->set('filterSearch', 'mercado extra')
+            ->assertSee('Extra Mercado Ltda')
+            ->assertDontSee('Farmacia');
+    }
+
+    public function test_search_tolerates_a_typo_via_approximate_match(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'type' => 'despesa',
+            'description' => 'Pagamento Aluguel', 'amount' => 1500, 'date' => now(),
+        ]);
+
+        Volt::test('transactions.index')
+            ->set('filterSearch', 'alugel')
+            ->assertSee('Pagamento Aluguel')
+            ->assertSet('searchFallbackUsed', true);
+    }
+
+    public function test_search_without_matches_or_close_words_shows_nothing(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'type' => 'despesa',
+            'description' => 'Supermercado', 'amount' => 90, 'date' => now(),
+        ]);
+
+        Volt::test('transactions.index')
+            ->set('filterSearch', 'xyzabc123')
+            ->assertDontSee('Supermercado');
+    }
 }

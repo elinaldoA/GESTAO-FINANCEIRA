@@ -99,4 +99,80 @@ class DashboardAlertsTest extends TestCase
 
         Volt::test('dashboard')->assertDontSee('hoje.');
     }
+
+    public function test_budget_on_track_to_overrun_generates_a_predictive_alert(): void
+    {
+        $this->travelTo(now()->startOfMonth()->addDays(9));
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+        $category = $user->categories()->create(['name' => 'Lazer', 'type' => 'despesa']);
+        $user->budgets()->create(['category_id' => $category->id, 'month' => now()->month, 'year' => now()->year, 'amount' => 300]);
+
+        // R$150 spent by day 9 of a 30-day month projects to R$500, well above the R$300 budget.
+        $user->transactions()->create([
+            'account_id' => $account->id, 'category_id' => $category->id,
+            'type' => 'despesa', 'description' => 'Cinema', 'amount' => 150, 'date' => now(), 'is_paid' => true,
+        ]);
+
+        Volt::test('dashboard')->assertSee('deve estourar antes do fim do mês');
+    }
+
+    public function test_budget_within_projected_pace_does_not_generate_a_predictive_alert(): void
+    {
+        $this->travelTo(now()->startOfMonth()->addDays(9));
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+        $category = $user->categories()->create(['name' => 'Lazer', 'type' => 'despesa']);
+        $user->budgets()->create(['category_id' => $category->id, 'month' => now()->month, 'year' => now()->year, 'amount' => 1000]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'category_id' => $category->id,
+            'type' => 'despesa', 'description' => 'Cinema', 'amount' => 50, 'date' => now(), 'is_paid' => true,
+        ]);
+
+        Volt::test('dashboard')->assertDontSee('deve estourar antes do fim do mês');
+    }
+
+    public function test_month_projection_insight_is_shown_after_the_first_few_days(): void
+    {
+        $this->travelTo(now()->startOfMonth()->addDays(9));
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'type' => 'despesa', 'description' => 'Compra', 'amount' => 90, 'date' => now(), 'is_paid' => true,
+        ]);
+
+        Volt::test('dashboard')->assertSee('deve fechar o mês com cerca de');
+    }
+
+    public function test_category_spending_far_above_recent_average_is_highlighted(): void
+    {
+        $this->travelTo(now()->startOfMonth()->addDays(9));
+
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $user->accounts()->create(['name' => 'Conta', 'type' => 'corrente', 'initial_balance' => 0]);
+        $category = $user->categories()->create(['name' => 'Lazer', 'type' => 'despesa']);
+
+        foreach ([1, 2, 3] as $monthsAgo) {
+            $user->transactions()->create([
+                'account_id' => $account->id, 'category_id' => $category->id, 'type' => 'despesa',
+                'description' => 'Gasto normal', 'amount' => 50, 'date' => now()->subMonths($monthsAgo), 'is_paid' => true,
+            ]);
+        }
+
+        $user->transactions()->create([
+            'account_id' => $account->id, 'category_id' => $category->id, 'type' => 'despesa',
+            'description' => 'Gasto alto', 'amount' => 400, 'date' => now(), 'is_paid' => true,
+        ]);
+
+        Volt::test('dashboard')->assertSee('acima da média dos últimos meses');
+    }
 }

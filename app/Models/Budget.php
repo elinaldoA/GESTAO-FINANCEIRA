@@ -38,4 +38,23 @@ class Budget extends Model
             ->whereMonth('date', $this->month)
             ->sum('amount');
     }
+
+    /**
+     * Total spent per category for a given month/year, in a single query.
+     * Used to avoid one `getSpentAttribute()` query per budget when rendering a list.
+     *
+     * @return array<int, float> keyed by category_id
+     */
+    public static function spentMapFor(int $userId, int $month, int $year): array
+    {
+        return Transaction::where('user_id', $userId)
+            ->where('type', 'despesa')
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->groupBy('category_id')
+            ->selectRaw('category_id, SUM(amount) as total')
+            ->pluck('total', 'category_id')
+            ->map(fn ($total) => (float) $total)
+            ->all();
+    }
 }

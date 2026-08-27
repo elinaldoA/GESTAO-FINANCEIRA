@@ -88,6 +88,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->with('category')
                 ->where('month', $this->month)->where('year', $this->year)
                 ->get(),
+            'spentMap' => Budget::spentMapFor(auth()->id(), (int) $this->month, (int) $this->year),
             'categories' => auth()->user()->categories()->where('type', 'despesa')->orderBy('name')->get(),
         ];
     }
@@ -145,12 +146,15 @@ new #[Layout('layouts.app')] class extends Component
                 </h3>
                 <div class="space-y-4">
                     @forelse ($budgets as $budget)
-                        @php $percent = $budget->amount > 0 ? min(100, ($budget->spent / $budget->amount) * 100) : 0; @endphp
+                        @php
+                            $spent = $spentMap[$budget->category_id] ?? 0;
+                            $percent = $budget->amount > 0 ? min(100, ($spent / $budget->amount) * 100) : 0;
+                        @endphp
                         <div>
                             <div class="flex justify-between items-center text-sm mb-1">
                                 <span class="text-gray-700 font-medium">{{ $budget->category->name }}</span>
                                 <span class="space-x-2">
-                                    <span class="text-gray-500">R$ {{ number_format($budget->spent, 2, ',', '.') }} / R$ {{ number_format($budget->amount, 2, ',', '.') }}</span>
+                                    <span class="text-gray-500">R$ {{ number_format($spent, 2, ',', '.') }} / R$ {{ number_format($budget->amount, 2, ',', '.') }}</span>
                                     <button wire:click="edit({{ $budget->id }})" class="text-indigo-600 hover:underline">Editar</button>
                                     <button type="button" x-on:click="Swal.fire({icon:'warning',title:'Excluir orçamento?',showCancelButton:true,confirmButtonText:'Excluir',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626'}).then((r) => r.isConfirmed && $wire.delete({{ $budget->id }}))" class="text-red-600 hover:underline">Excluir</button>
                                 </span>

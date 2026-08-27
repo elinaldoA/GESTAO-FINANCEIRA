@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Budget;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -71,6 +72,38 @@ class FinancialAlerts
                     'message' => "\"{$investment->name}\" ({$investment->ticker}) {$direction} {$formattedChange}% hoje.",
                     'url' => route('investments.index'),
                 ];
+            }
+        }
+
+        $daysInMonth = $today->daysInMonth;
+        $daysLeft = $daysInMonth - $today->day;
+
+        if ($today->day > 3 && $daysLeft >= 2) {
+            $spentMap = Budget::spentMapFor($user->id, (int) $today->month, (int) $today->year);
+
+            foreach ($user->budgets()->with('category')->where('month', $today->month)->where('year', $today->year)->get() as $budget) {
+                if ((float) $budget->amount <= 0) {
+                    continue;
+                }
+
+                $spent = $spentMap[$budget->category_id] ?? 0.0;
+                $percent = ($spent / (float) $budget->amount) * 100;
+
+                if ($percent >= 100) {
+                    continue;
+                }
+
+                $projection = $spent / $today->day * $daysInMonth;
+
+                if ($projection >= (float) $budget->amount) {
+                    $categoryName = $budget->category->name ?? 'categoria';
+
+                    $alerts[] = [
+                        'severity' => 'warning',
+                        'message' => "No ritmo atual, o orçamento de \"{$categoryName}\" deve estourar antes do fim do mês (projeção: R$ ".number_format($projection, 2, ',', '.').' de R$ '.number_format((float) $budget->amount, 2, ',', '.').').',
+                        'url' => route('budgets.index'),
+                    ];
+                }
             }
         }
 
