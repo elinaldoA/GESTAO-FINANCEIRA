@@ -281,6 +281,44 @@ new #[Layout('layouts.app')] class extends Component
             ];
         });
 
+        $quotesCarousel = collect();
+
+        if ($marketIndices['ibovespa']) {
+            $quotesCarousel->push([
+                'ticker' => 'IBOV',
+                'name' => 'Ibovespa',
+                'price' => $marketIndices['ibovespa']['price'],
+                'change' => $marketIndices['ibovespa']['changePercent'],
+                'isIndex' => true,
+            ]);
+        }
+
+        if ($marketIndices['usd']) {
+            $quotesCarousel->push([
+                'ticker' => 'USD/BRL',
+                'name' => 'Dólar',
+                'price' => $marketIndices['usd']['price'],
+                'change' => $marketIndices['usd']['changePercent'],
+                'isIndex' => true,
+            ]);
+        }
+
+        $quotesCarousel = $quotesCarousel->concat(
+            $allInvestments
+                ->whereNotNull('ticker')
+                ->whereNotNull('current_price')
+                ->unique('ticker')
+                ->sortBy('ticker')
+                ->map(fn ($investment) => [
+                    'ticker' => $investment->ticker,
+                    'name' => $investment->name,
+                    'price' => (float) $investment->current_price,
+                    'change' => $investment->day_change_percent !== null ? (float) $investment->day_change_percent : null,
+                    'isIndex' => false,
+                ])
+                ->values()
+        );
+
         return [
             'investments' => $investmentsQuery->paginate(10),
             'investmentTypes' => $investmentTypes,
@@ -296,6 +334,7 @@ new #[Layout('layouts.app')] class extends Component
                 'colors' => $allocation->map(fn ($row) => $row['type']->color)->all(),
                 'totals' => $allocation->map(fn ($row) => $row['current'])->all(),
             ],
+            'quotesCarousel' => $quotesCarousel,
             'historyChart' => [
                 'labels' => $history->map(fn ($row) => $row->date->format('d/m'))->all(),
                 'invested' => $history->map(fn ($row) => (float) $row->total_invested)->all(),
@@ -322,31 +361,48 @@ new #[Layout('layouts.app')] class extends Component
                 </div>
             @endif
 
-            @if($marketIndices['usd'] || $marketIndices['ibovespa'])
-                <div class="flex flex-wrap gap-4 bg-white shadow-sm rounded-lg p-4">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide self-center">Mercado hoje</span>
-                    @if($marketIndices['usd'])
-                        <div class="flex items-center gap-2 text-sm">
-                            <span class="text-gray-500">Dólar</span>
-                            <span class="font-semibold text-gray-800">R$ {{ number_format($marketIndices['usd']['price'], 2, ',', '.') }}</span>
-                            @if($marketIndices['usd']['changePercent'] !== null)
-                                <span class="{{ $marketIndices['usd']['changePercent'] >= 0 ? 'text-green-600' : 'text-red-600' }}">
-                                    ({{ $marketIndices['usd']['changePercent'] >= 0 ? '+' : '' }}{{ number_format($marketIndices['usd']['changePercent'], 2, ',', '.') }}%)
-                                </span>
-                            @endif
+            @if($quotesCarousel->isNotEmpty())
+                <div
+                    class="relative bg-white shadow-sm rounded-lg p-4"
+                    x-data="{
+                        scrollBy(dir) { this.$refs.track.scrollBy({ left: dir * 320, behavior: 'smooth' }) }
+                    }"
+                >
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cotações</span>
+                        <div class="flex gap-1">
+                            <button type="button" x-on:click="scrollBy(-1)" class="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 010 1.06L9.06 10l3.73 3.71a.75.75 0 11-1.06 1.06l-4.25-4.24a.75.75 0 010-1.06l4.25-4.24a.75.75 0 011.06 0z" clip-rule="evenodd" /></svg>
+                            </button>
+                            <button type="button" x-on:click="scrollBy(1)" class="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 010-1.06L10.94 10 7.21 6.29a.75.75 0 111.06-1.06l4.25 4.24a.75.75 0 010 1.06l-4.25 4.24a.75.75 0 01-1.06 0z" clip-rule="evenodd" /></svg>
+                            </button>
                         </div>
-                    @endif
-                    @if($marketIndices['ibovespa'])
-                        <div class="flex items-center gap-2 text-sm">
-                            <span class="text-gray-500">Ibovespa</span>
-                            <span class="font-semibold text-gray-800">{{ number_format($marketIndices['ibovespa']['price'], 0, ',', '.') }} pts</span>
-                            @if($marketIndices['ibovespa']['changePercent'] !== null)
-                                <span class="{{ $marketIndices['ibovespa']['changePercent'] >= 0 ? 'text-green-600' : 'text-red-600' }}">
-                                    ({{ $marketIndices['ibovespa']['changePercent'] >= 0 ? '+' : '' }}{{ number_format($marketIndices['ibovespa']['changePercent'], 2, ',', '.') }}%)
-                                </span>
-                            @endif
-                        </div>
-                    @endif
+                    </div>
+
+                    <div
+                        x-ref="track"
+                        class="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-1 [&::-webkit-scrollbar]:hidden"
+                        style="scrollbar-width: none; -ms-overflow-style: none;"
+                    >
+                        @foreach ($quotesCarousel as $quote)
+                            @php $up = $quote['change'] !== null && $quote['change'] >= 0; @endphp
+                            <div class="flex-none w-40 snap-start rounded-lg border border-gray-100 p-3 hover:shadow-md hover:border-gray-200 transition">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-bold text-gray-800">{{ $quote['ticker'] }}</span>
+                                    @if($quote['change'] !== null)
+                                        <span class="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded {{ $up ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600' }}">
+                                            {{ $up ? '▲' : '▼' }} {{ number_format(abs($quote['change']), 2, ',', '.') }}%
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="text-xs text-gray-400 mt-0.5 truncate" title="{{ $quote['name'] }}">{{ $quote['name'] }}</p>
+                                <p class="text-base font-semibold text-gray-900 mt-2">
+                                    {{ $quote['isIndex'] && $quote['ticker'] === 'IBOV' ? '' : 'R$ ' }}{{ number_format($quote['price'], $quote['isIndex'] && $quote['ticker'] === 'IBOV' ? 0 : 2, ',', '.') }}{{ $quote['isIndex'] && $quote['ticker'] === 'IBOV' ? ' pts' : '' }}
+                                </p>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
             @endif
 
