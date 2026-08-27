@@ -5,3 +5,20 @@
 [x-cloak] {
     display: none !important;
 }
+
+/* Substituído pelo modal central de carregamento (#page-loading-overlay). */
+#nprogress {
+    display: none !important;
+}
+
+/*
+ * Controlado via classe em <html> (não em <body>, que é substituído pelo
+ * wire:navigate) para sobreviver à troca de página sem depender do estado
+ * reativo do Alpine, que é destruído/recriado durante a navegação.
+ */
+#page-loading-overlay {
+    display: none;
+}
+html.is-page-loading #page-loading-overlay {
+    display: flex;
+}

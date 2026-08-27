@@ -19,6 +19,30 @@ const toast = Swal.mixin({
 });
 window.toast = toast;
 
+(() => {
+    // Safety net: if a navigation never completes (network error, cancelled
+    // mid-flight), don't leave the overlay stuck forever.
+    const MAX_VISIBLE_MS = 8000;
+    let safetyTimeout = null;
+
+    // 'livewire:navigate' fires the instant a navigation starts (before the
+    // page is fetched) — this is what makes the overlay cover the actual
+    // network wait. 'livewire:navigating' fires only after the fetch has
+    // already resolved, which is too late to be useful here.
+    document.addEventListener('livewire:navigate', () => {
+        clearTimeout(safetyTimeout);
+        document.documentElement.classList.add('is-page-loading');
+        safetyTimeout = setTimeout(() => {
+            document.documentElement.classList.remove('is-page-loading');
+        }, MAX_VISIBLE_MS);
+    });
+
+    document.addEventListener('livewire:navigated', () => {
+        clearTimeout(safetyTimeout);
+        document.documentElement.classList.remove('is-page-loading');
+    });
+})();
+
 document.addEventListener('livewire:init', () => {
     Livewire.on('notify', ({ type = 'success', message }) => {
         toast.fire({ icon: type, title: message, timer: type === 'success' ? 3000 : 6000 });

@@ -15,14 +15,16 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">
-        <div class="min-h-screen bg-gray-100 flex flex-col">
+        <x-page-loading-overlay />
+
+        <div class="min-h-screen bg-slate-50 flex flex-col">
             <livewire:layout.navigation />
 
             <div class="lg:pl-64 flex flex-col flex-1">
                 <!-- Page Heading -->
                 @if (isset($header))
-                    <header class="bg-white shadow">
-                        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                    <header class="bg-white border-b border-slate-200">
+                        <div class="max-w-7xl mx-auto py-5 px-4 sm:px-6 lg:px-8">
                             {{ $header }}
                         </div>
                     </header>
@@ -34,8 +36,8 @@
                 </main>
 
                 <!-- Footer -->
-                <footer class="border-t border-gray-200 py-4">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-gray-500">
+                <footer class="border-t border-slate-200 py-4">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-400">
                         <span>&copy; {{ now()->year }} {{ config('app.name') }}. Todos os direitos reservados.</span>
                         <span>Feito com Laravel &amp; Livewire</span>
                     </div>
