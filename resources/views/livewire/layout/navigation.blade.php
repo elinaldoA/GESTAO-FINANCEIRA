@@ -89,7 +89,7 @@ new class extends Component
             ['route' => 'credit-cards.index', 'label' => __('Cartões'), 'icon' => 'M2 8h20M2 8v9a2 2 0 002 2h16a2 2 0 002-2V8M2 8V6a2 2 0 012-2h16a2 2 0 012 2v2M6 15h4'],
             ['route' => 'categories.index', 'label' => __('Categorias'), 'icon' => 'M4 6h16M4 12h10M4 18h6'],
             ['route' => 'budgets.index', 'label' => __('Orçamentos'), 'icon' => 'M12 3v18M3 12h18'],
-            ['route' => 'investments.index', 'label' => __('Investimentos'), 'icon' => 'M3 17l6-6 4 4 8-8M21 7v6M21 7h-6'],
+            ['route' => 'investments.index', 'match' => 'investments.*', 'label' => __('Investimentos'), 'icon' => 'M3 17l6-6 4 4 8-8M21 7v6M21 7h-6'],
             ['route' => 'goals.index', 'label' => __('Metas'), 'icon' => 'M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4Zm0-5v3m0 13v3m9-9h-3M6 12H3'],
             ['route' => 'reports.index', 'label' => __('Relatórios'), 'icon' => 'M4 20V10m6 10V4m6 16v-7'],
             ['route' => 'trash.index', 'label' => __('Lixeira'), 'icon' => 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16'],
@@ -117,7 +117,7 @@ new class extends Component
 
         <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             @foreach ($links as $link)
-                @php $active = request()->routeIs($link['route']); @endphp
+                @php $active = request()->routeIs($link['match'] ?? $link['route']); @endphp
                 <a
                     href="{{ route($link['route']) }}"
                     wire:navigate

@@ -70,6 +70,22 @@ class InvestmentQuoteUpdateTest extends TestCase
 
         $this->assertSame('100.00', $investment->fresh()->current_amount);
         $this->assertNull($investment->fresh()->quote_updated_at);
+        $this->assertNotNull($investment->fresh()->quote_failed_at);
+    }
+
+    public function test_positions_page_shows_a_warning_banner_when_a_tracked_quote_is_failing(): void
+    {
+        Http::fake([
+            'brapi.dev/*' => Http::response(['error' => true], 500),
+        ]);
+
+        $user = User::factory()->create();
+        $investment = Investment::factory()->for($user)->create(['ticker' => 'PETR4', 'quantity' => 10]);
+
+        Volt::actingAs($user)
+            ->test('investments.positions')
+            ->call('refreshQuote', $investment->id)
+            ->assertSee('Algumas cotações não puderam ser atualizadas agora');
     }
 
     public function test_user_can_manually_refresh_a_single_investment_quote(): void
@@ -88,7 +104,7 @@ class InvestmentQuoteUpdateTest extends TestCase
         ]);
 
         Volt::actingAs($user)
-            ->test('investments.index')
+            ->test('investments.positions')
             ->call('refreshQuote', $investment->id);
 
         $this->assertSame('150.00', $investment->fresh()->current_amount);
@@ -102,7 +118,7 @@ class InvestmentQuoteUpdateTest extends TestCase
         $intruder = User::factory()->create();
 
         Volt::actingAs($intruder)
-            ->test('investments.index')
+            ->test('investments.positions')
             ->call('refreshQuote', $investment->id)
             ->assertForbidden();
     }
@@ -120,7 +136,7 @@ class InvestmentQuoteUpdateTest extends TestCase
         $manual = Investment::factory()->for($user)->create(['ticker' => null, 'quantity' => null, 'current_amount' => 999]);
 
         Volt::actingAs($user)
-            ->test('investments.index')
+            ->test('investments.positions')
             ->call('refreshAllQuotes');
 
         $this->assertSame('150.00', $itub->fresh()->current_amount);
@@ -135,7 +151,7 @@ class InvestmentQuoteUpdateTest extends TestCase
         Investment::factory()->for($user)->create(['name' => 'Ações banco', 'ticker' => 'ITUB4', 'broker' => 'XP']);
 
         Volt::actingAs($user)
-            ->test('investments.index')
+            ->test('investments.positions')
             ->set('search', 'ITUB4')
             ->assertSee('Ações banco')
             ->assertDontSee('Reserva de emergência');

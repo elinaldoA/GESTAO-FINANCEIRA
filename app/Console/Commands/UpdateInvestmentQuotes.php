@@ -26,6 +26,7 @@ class UpdateInvestmentQuotes extends Command
                     $quote = $quotes->fetchQuote($investment->ticker);
 
                     if ($quote === null) {
+                        $investment->markQuoteFailed();
                         $failed++;
 
                         continue;

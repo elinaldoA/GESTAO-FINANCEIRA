@@ -12,7 +12,11 @@ class InvestmentType extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'name', 'color',
+        'user_id', 'name', 'color', 'tax_rate',
+    ];
+
+    protected $casts = [
+        'tax_rate' => 'decimal:2',
     ];
 
     public function user(): BelongsTo

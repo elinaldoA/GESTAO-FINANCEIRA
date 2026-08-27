@@ -17,6 +17,14 @@ class StockQuoteService
     private const CACHE_SECONDS = 30;
 
     /**
+     * How long a failed fetch is remembered before trying again. Laravel's
+     * Cache::remember() treats a null result as a cache miss, so a downed API
+     * would otherwise be hit again on every single call (e.g. every wire:poll
+     * tick, from every open tab) instead of backing off.
+     */
+    private const FAILURE_CACHE_SECONDS = 20;
+
+    /**
      * Fetch the latest price for a single ticker from the Brapi API.
      *
      * Tickers are requested one at a time: a single unknown/delisted symbol
@@ -39,7 +47,39 @@ class StockQuoteService
      */
     public function fetchQuote(string $ticker): ?array
     {
-        return Cache::remember("quote:{$ticker}", self::CACHE_SECONDS, fn () => $this->fetchQuoteLive($ticker));
+        return $this->rememberOrFail("quote:{$ticker}", self::CACHE_SECONDS, fn () => $this->fetchQuoteLive($ticker));
+    }
+
+    /**
+     * Like Cache::remember(), but a failed (null) result is also cached briefly
+     * under a separate key, so repeated calls back off instead of hitting the
+     * upstream API again on every miss.
+     *
+     * @param  \Closure(): (array|null)  $live
+     */
+    private function rememberOrFail(string $key, int $ttl, \Closure $live): ?array
+    {
+        $cached = Cache::get($key);
+
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        if (Cache::has("{$key}:failed")) {
+            return null;
+        }
+
+        $result = $live();
+
+        if ($result === null) {
+            Cache::put("{$key}:failed", true, self::FAILURE_CACHE_SECONDS);
+
+            return null;
+        }
+
+        Cache::put($key, $result, $ttl);
+
+        return $result;
     }
 
     private function fetchQuoteLive(string $ticker): ?array
@@ -133,20 +173,92 @@ class StockQuoteService
      */
     public function fetchUsdBrl(): ?array
     {
-        return Cache::remember('quote:USDBRL', self::CACHE_SECONDS, fn () => $this->fetchUsdBrlLive());
+        return $this->fetchAwesomeApiPair('USD-BRL', 'USDBRL');
     }
 
-    private function fetchUsdBrlLive(): ?array
+    /**
+     * Fetch the EUR/BRL exchange rate from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchEurBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('EUR-BRL', 'EURBRL');
+    }
+
+    /**
+     * Fetch the BTC/BRL price from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchBtcBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('BTC-BRL', 'BTCBRL');
+    }
+
+    /**
+     * Fetch the GBP/BRL exchange rate from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchGbpBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('GBP-BRL', 'GBPBRL');
+    }
+
+    /**
+     * Fetch the ARS/BRL exchange rate from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchArsBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('ARS-BRL', 'ARSBRL');
+    }
+
+    /**
+     * Fetch the ETH/BRL price from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchEthBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('ETH-BRL', 'ETHBRL');
+    }
+
+    /**
+     * Fetch the XRP/BRL price from the free AwesomeAPI (no token required).
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    public function fetchXrpBrl(): ?array
+    {
+        return $this->fetchAwesomeApiPair('XRP-BRL', 'XRPBRL');
+    }
+
+    /**
+     * Fetch a currency/asset pair from the free AwesomeAPI (economia.awesomeapi.com.br),
+     * which needs no token and covers fiat pairs (USD-BRL, EUR-BRL, ...) and crypto
+     * (BTC-BRL, ...) under the same "last/{PAIR}" endpoint and response shape.
+     *
+     * @return array{price: float, changePercent: ?float}|null
+     */
+    private function fetchAwesomeApiPair(string $pair, string $jsonKey): ?array
+    {
+        return $this->rememberOrFail("quote:{$jsonKey}", self::CACHE_SECONDS, fn () => $this->fetchAwesomeApiPairLive($pair, $jsonKey));
+    }
+
+    private function fetchAwesomeApiPairLive(string $pair, string $jsonKey): ?array
     {
         try {
-            $response = Http::timeout(10)->get('https://economia.awesomeapi.com.br/last/USD-BRL');
+            $response = Http::timeout(10)->get("https://economia.awesomeapi.com.br/last/{$pair}");
 
             if (! $response->successful()) {
                 return null;
             }
 
-            $price = $response->json('USDBRL.bid');
-            $changePercent = $response->json('USDBRL.pctChange');
+            $price = $response->json("{$jsonKey}.bid");
+            $changePercent = $response->json("{$jsonKey}.pctChange");
 
             if (! is_numeric($price)) {
                 return null;
@@ -157,7 +269,7 @@ class StockQuoteService
                 'changePercent' => is_numeric($changePercent) ? (float) $changePercent : null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("StockQuoteService: erro ao consultar cotação do dólar: {$e->getMessage()}");
+            Log::warning("StockQuoteService: erro ao consultar cotação de {$pair}: {$e->getMessage()}");
 
             return null;
         }

@@ -36,6 +36,24 @@ class DividendCrudTest extends TestCase
         ]);
     }
 
+    public function test_user_can_register_a_dividend_smaller_than_a_cent(): void
+    {
+        $user = User::factory()->create();
+        $investment = Investment::factory()->for($user)->create();
+
+        Volt::actingAs($user)
+            ->test('investments.show', ['investment' => $investment])
+            ->set('dividendDate', '2026-01-15')
+            ->set('dividendType', 'dividendo')
+            ->set('dividendAmount', '0.004101')
+            ->call('saveDividend')
+            ->assertHasNoErrors();
+
+        $dividend = $investment->dividends()->first();
+        $this->assertSame('0.004101', $dividend->amount);
+        $this->assertSame('0,004101', $dividend->display_amount);
+    }
+
     public function test_user_can_edit_a_dividend(): void
     {
         $user = User::factory()->create();
@@ -48,7 +66,7 @@ class DividendCrudTest extends TestCase
             ->set('dividendAmount', '99.90')
             ->call('saveDividend');
 
-        $this->assertSame('99.90', $dividend->fresh()->amount);
+        $this->assertSame('99.900000', $dividend->fresh()->amount);
     }
 
     public function test_user_can_delete_a_dividend(): void

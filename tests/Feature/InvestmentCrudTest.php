@@ -16,8 +16,9 @@ class InvestmentCrudTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        // Mounting seeds the user's default investment types automatically.
-        $component = Volt::test('investments.index');
+        // Mounting the Resumo tab seeds the user's default investment types automatically.
+        Volt::test('investments.index');
+        $component = Volt::test('investments.positions');
         $type = $user->investmentTypes()->where('name', 'Tesouro Direto')->firstOrFail();
 
         $component
@@ -36,10 +37,16 @@ class InvestmentCrudTest extends TestCase
         ]);
 
         $investment = $user->investments()->first();
+        $this->assertEquals('1000.00', $investment->invested_amount);
         $this->assertEquals(80.0, $investment->gain);
         $this->assertEquals(8.0, $investment->gain_percent);
+        $this->assertDatabaseHas('investment_transactions', [
+            'investment_id' => $investment->id,
+            'type' => 'aporte',
+            'amount' => '1000.00',
+        ]);
 
-        Volt::test('investments.index')
+        Volt::test('investments.positions')
             ->call('edit', $investment)
             ->set('current_amount', '900')
             ->call('save')
@@ -49,7 +56,7 @@ class InvestmentCrudTest extends TestCase
         $this->assertEquals('900.00', $investment->current_amount);
         $this->assertTrue($investment->gain < 0);
 
-        Volt::test('investments.index')->call('delete', $investment);
+        Volt::test('investments.positions')->call('delete', $investment);
         $this->assertSoftDeleted('investments', ['id' => $investment->id]);
     }
 
@@ -58,7 +65,7 @@ class InvestmentCrudTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        Volt::test('investments.index')
+        Volt::test('investments.positions')
             ->set('new_type_name', 'FII')
             ->set('new_type_color', '#f59e0b')
             ->call('addType')

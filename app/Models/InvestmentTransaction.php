@@ -2,30 +2,38 @@
 
 namespace App\Models;
 
-use App\Support\Money;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Dividend extends Model
+class InvestmentTransaction extends Model
 {
     use HasFactory, SoftDeletes;
 
     public const TYPES = [
-        'dividendo' => 'Dividendo',
-        'jscp' => 'JSCP',
-        'rendimento' => 'Rendimento',
-        'outro' => 'Outro',
+        'compra' => 'Compra',
+        'venda' => 'Venda',
+        'aporte' => 'Aporte',
+        'resgate' => 'Resgate',
     ];
 
+    /** Types that apply to investments tracked by ticker (quantity x price). */
+    public const TICKER_TYPES = ['compra', 'venda'];
+
+    /** Types that apply to investments without a ticker (plain cash amount). */
+    public const CASH_TYPES = ['aporte', 'resgate'];
+
     protected $fillable = [
-        'user_id', 'investment_id', 'date', 'type', 'amount', 'notes',
+        'user_id', 'investment_id', 'date', 'type', 'quantity', 'unit_price', 'fees', 'amount', 'notes',
     ];
 
     protected $casts = [
         'date' => 'date',
-        'amount' => 'decimal:6',
+        'quantity' => 'decimal:8',
+        'unit_price' => 'decimal:4',
+        'fees' => 'decimal:2',
+        'amount' => 'decimal:2',
     ];
 
     public function user(): BelongsTo
@@ -41,16 +49,5 @@ class Dividend extends Model
     public function getTypeLabelAttribute(): string
     {
         return self::TYPES[$this->type];
-    }
-
-    /**
-     * Amount formatted pt-BR, showing up to 6 decimals but trimmed down to no
-     * fewer than 2 — proventos on very small positions can be a fraction of a
-     * cent (e.g. 0,004101), and a flat 2-decimal format would silently show
-     * those as "0,00".
-     */
-    public function getDisplayAmountAttribute(): string
-    {
-        return Money::trimmed((float) $this->amount);
     }
 }

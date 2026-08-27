@@ -151,6 +151,26 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 
+    Alpine.data('barChart', (data) => ({
+        chart: null,
+        init(canvas) {
+            this.chart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: data.label ?? '', data: data.values, backgroundColor: data.colors ?? '#4f46e5' },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                },
+            });
+        },
+    }));
+
     Alpine.data('assetHistoryChart', (data) => ({
         chart: null,
         init(canvas) {

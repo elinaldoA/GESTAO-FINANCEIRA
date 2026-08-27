@@ -18,7 +18,7 @@ class DividendFactory extends Factory
             'user_id' => User::factory(),
             'investment_id' => Investment::factory(),
             'date' => fake()->date(),
-            'type' => fake()->randomElement(['dividendo', 'jcp', 'rendimento', 'outro']),
+            'type' => fake()->randomElement(['dividendo', 'jscp', 'rendimento', 'outro']),
             'amount' => fake()->randomFloat(2, 1, 500),
             'notes' => null,
         ];
